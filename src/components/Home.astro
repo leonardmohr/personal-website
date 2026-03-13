@@ -1,0 +1,535 @@
+---
+import ConstructionTruck from '../assets/construction-truck.astro';
+---
+
+<style>
+/* Dark overlay */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 0;
+}
+
+.hero {
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: url("../assets/background.png") center / cover no-repeat;
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.hero h1 {
+  position: absolute;
+  left: 36%;
+  top: 18%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  text-align: center;
+  color: rgba(255,255,255,0.85);
+  text-shadow: 0 4px 8px rgba(0,0,0,0.8);
+  font-size: clamp(1rem, 3.5vw, 3.125rem);
+  font-weight: 800;
+}
+
+.hero h1 span {
+  display: block;
+}
+
+.bounce-zone {
+  position: relative;
+  width: 100%;
+  height: 60vh;
+  overflow: hidden;
+  background: transparent;
+}
+
+#bouncer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  pointer-events: none;
+  transition: filter 150ms ease;
+}
+
+#bouncer.angry {
+  filter:
+    brightness(0.82)
+    saturate(2.2)
+    hue-rotate(-18deg)
+    drop-shadow(0 0 12px rgba(255, 50, 0, 0.85));
+}
+
+#particleCanvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+</style>
+
+<section class="hero">
+  <h1>
+    <span>WELCOME TO MY WEBSITE,</span>
+    <span>A REPOSITORY OF THINGS I FIND INTERESTING.</span>
+  </h1>
+</section>
+
+<section class="bounce-zone" id="bounceZone">
+  <ConstructionTruck />
+  <canvas id="particleCanvas"></canvas>
+</section>
+
+<script>
+(() => {
+  const zone   = document.getElementById("bounceZone");
+  const box    = document.getElementById("bouncer");
+  const canvas = document.getElementById("particleCanvas");
+  const ctx    = canvas.getContext("2d");
+
+  // ── Truck rendered size ──────────────────────────────────────
+  // SVG viewBox is 505×430; rendered at 120px wide
+  const W = 120;
+  const H = Math.round(W * 430 / 505); // ~102px
+
+  box.setAttribute("width", W + "px");
+
+  // Scoop tip position relative to truck top-left (rendered px)
+  // SVG scoop: approx (11, 269) in 505×430 space
+  const SCOOP_RX = Math.round(W * 11  / 505); // ~3
+  const SCOOP_RY = Math.round(H * 269 / 430); // ~64
+
+  // Cab window center relative to truck top-left (for angry eyes)
+  // SVG window center: (327+54, 78+42) = (381, 120)
+  const EYE_RX = Math.round(W * 381 / 505); // ~91
+  const EYE_RY = Math.round(H * 120 / 430); // ~28
+
+  // ── Physics ──────────────────────────────────────────────────
+  let x = 20, y = 20;
+  let vx = 220, vy = 180;
+  let bobTime = 0;
+
+  const BUBBLE_RADIUS  = 160;   // px — cursor repulsion radius
+  const REPULSION      = 40000; // acceleration strength
+  const MAX_SPEED      = 650;   // px/sec
+  const MIN_SPEED      = 140;   // px/sec
+
+  // ── Cursor ───────────────────────────────────────────────────
+  let mouseX = -9999, mouseY = -9999;
+
+  // ── State ────────────────────────────────────────────────────
+  let isAngry      = false;
+  let angerCooldown = 0;
+  const THROW_INTERVAL = 0.32; // seconds between throws
+
+  let digTimer = 0;
+
+  // ── Particle pools ───────────────────────────────────────────
+  const particles   = []; // dig puffs + splash burst
+  const projectiles = []; // angry thrown clumps
+  const splats      = []; // impact marks
+
+  const MAX_PARTICLES   = 300;
+  const MAX_PROJECTILES = 50;
+
+  const DIRT_DARK  = ['#5c3d1e','#6b4423','#3a2010','#4a2e10'];
+  const DIRT_LIGHT = ['#b89470','#c8aa88','#d4b896','#a0785a','#c09868'];
+
+  // ── Particle ─────────────────────────────────────────────────
+  class Particle {
+    constructor(px, py, pvx, pvy, life, size, color, grav = 280) {
+      this.x = px;  this.y = py;
+      this.vx = pvx; this.vy = pvy;
+      this.life = life; this.maxLife = life;
+      this.size = size; this.color = color;
+      this.grav = grav;
+      this.rot  = Math.random() * Math.PI * 2;
+      this.rotV = (Math.random() - 0.5) * 6;
+    }
+    update(dt) {
+      this.vy  += this.grav * dt;
+      this.x   += this.vx  * dt;
+      this.y   += this.vy  * dt;
+      this.rot += this.rotV * dt;
+      this.life -= dt;
+    }
+    get alpha() { return Math.max(0, this.life / this.maxLife); }
+    draw() {
+      ctx.save();
+      ctx.globalAlpha = this.alpha * 0.88;
+      ctx.fillStyle = this.color;
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rot);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, this.size, this.size * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ── Projectile ───────────────────────────────────────────────
+  class Projectile {
+    constructor(px, py, pvx, pvy) {
+      this.x = px;  this.y = py;
+      this.vx = pvx; this.vy = pvy;
+      this.life = 3.2; this.maxLife = 3.2;
+      this.size = 6 + Math.random() * 7;
+      this.dead = false;
+      this.color = DIRT_DARK[Math.floor(Math.random() * DIRT_DARK.length)];
+    }
+    update(dt) {
+      this.vy  += 240 * dt; // gravity
+      this.x   += this.vx * dt;
+      this.y   += this.vy * dt;
+      this.life -= dt;
+
+      // Dirt trail
+      if (particles.length < MAX_PARTICLES && Math.random() < 0.4) {
+        particles.push(new Particle(
+          this.x, this.y,
+          (Math.random() - 0.5) * 25,
+          (Math.random() - 0.5) * 25,
+          0.2, this.size * 0.4, this.color, 40
+        ));
+      }
+
+      // Hit cursor bubble
+      const dx = this.x - mouseX;
+      const dy = this.y - mouseY;
+      if (Math.sqrt(dx * dx + dy * dy) < 50) {
+        this.dead = true;
+        splashAt(this.x, this.y, true);
+        return;
+      }
+
+      // Hit canvas edge
+      if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+        this.dead = true;
+        splashAt(
+          Math.min(Math.max(this.x, 0), canvas.width),
+          Math.min(Math.max(this.y, 0), canvas.height),
+          false
+        );
+      }
+    }
+    get alpha() { return Math.max(0, Math.min(1, this.life / this.maxLife)); }
+    draw() {
+      ctx.save();
+      ctx.globalAlpha = this.alpha;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+      // Darker inner core
+      ctx.globalAlpha = this.alpha * 0.5;
+      ctx.fillStyle = '#2a1508';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ── Splash / splat ───────────────────────────────────────────
+  function splashAt(sx, sy, big = false) {
+    const rx = big ? 28 + Math.random() * 22 : 14 + Math.random() * 10;
+    splats.push({
+      x: sx, y: sy,
+      rx, ry: rx * (0.45 + Math.random() * 0.4),
+      angle: Math.random() * Math.PI,
+      life: big ? 5.0 : 3.0,
+      maxLife: big ? 5.0 : 3.0,
+      big
+    });
+
+    const count = big ? 20 : 9;
+    for (let i = 0; i < count; i++) {
+      if (particles.length >= MAX_PARTICLES) break;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = big
+        ? 120 + Math.random() * 250
+        :  50 + Math.random() * 130;
+      const palette = [...DIRT_DARK, ...DIRT_LIGHT];
+      particles.push(new Particle(
+        sx, sy,
+        Math.cos(angle) * speed,
+        Math.sin(angle) * speed - (big ? 90 : 45),
+        0.4 + Math.random() * 0.8,
+        (big ? 3.5 : 2) + Math.random() * 3.5,
+        palette[Math.floor(Math.random() * palette.length)],
+        380
+      ));
+    }
+  }
+
+  // ── Throw dirt at cursor ─────────────────────────────────────
+  function throwDirt() {
+    if (projectiles.length >= MAX_PROJECTILES) return;
+    const sx = x + SCOOP_RX;
+    const sy = y + SCOOP_RY;
+    const dx = mouseX - sx;
+    const dy = mouseY - sy;
+    const d  = Math.sqrt(dx * dx + dy * dy);
+    if (d < 1) return;
+
+    const baseAngle = Math.atan2(dy, dx);
+    const baseSpeed = 300 + Math.random() * 130;
+    const count = 3 + Math.floor(Math.random() * 4);
+
+    for (let i = 0; i < count; i++) {
+      const spread = (Math.random() - 0.5) * 0.55;
+      const a = baseAngle + spread;
+      const s = baseSpeed * (0.75 + Math.random() * 0.5);
+      projectiles.push(new Projectile(
+        sx + (Math.random() - 0.5) * 14,
+        sy + (Math.random() - 0.5) * 14,
+        Math.cos(a) * s,
+        Math.sin(a) * s - 70 // loft upward slightly
+      ));
+    }
+  }
+
+  // ── Idle dig puff ─────────────────────────────────────────────
+  function emitDig() {
+    if (particles.length >= MAX_PARTICLES) return;
+    const sx = x + SCOOP_RX;
+    const sy = y + SCOOP_RY;
+    for (let i = 0; i < 5; i++) {
+      particles.push(new Particle(
+        sx + (Math.random() - 0.5) * 10,
+        sy + (Math.random() - 0.5) * 10,
+        (Math.random() - 0.5) * 70,
+        -55 - Math.random() * 65,
+        0.5 + Math.random() * 0.7,
+        2 + Math.random() * 3,
+        DIRT_LIGHT[Math.floor(Math.random() * DIRT_LIGHT.length)],
+        200
+      ));
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────
+  function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+  function resizeCanvas() {
+    canvas.width  = zone.clientWidth;
+    canvas.height = zone.clientHeight;
+  }
+
+  // ── Events ────────────────────────────────────────────────────
+  zone.addEventListener("mousemove", e => {
+    const r = zone.getBoundingClientRect();
+    mouseX = e.clientX - r.left;
+    mouseY = e.clientY - r.top;
+  });
+  zone.addEventListener("mouseleave", () => { mouseX = -9999; mouseY = -9999; });
+
+  // ── Main loop ─────────────────────────────────────────────────
+  let last = performance.now();
+
+  function step(now) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+
+    const zw   = zone.clientWidth;
+    const zh   = zone.clientHeight;
+    const maxX = Math.max(0, zw - W);
+    const maxY = Math.max(0, zh - H);
+
+    // Cursor → truck center distance
+    const cx   = x + W / 2;
+    const cy   = y + H / 2;
+    const ddx  = cx - mouseX;
+    const ddy  = cy - mouseY;
+    const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+
+    // Anger state (hysteresis prevents flickering)
+    const wasAngry = isAngry;
+    if (!isAngry && dist < BUBBLE_RADIUS)       isAngry = true;
+    if ( isAngry && dist > BUBBLE_RADIUS * 1.4) isAngry = false;
+    if (wasAngry !== isAngry) box.classList.toggle("angry", isAngry);
+
+    // Cursor repulsion
+    if (dist < BUBBLE_RADIUS && dist > 1) {
+      const strength = REPULSION * (1 - dist / BUBBLE_RADIUS) / dist;
+      vx += ddx * strength * dt;
+      vy += ddy * strength * dt;
+    }
+
+    // Speed limits
+    const spd = Math.sqrt(vx * vx + vy * vy);
+    if (spd > MAX_SPEED) {
+      vx = (vx / spd) * MAX_SPEED;
+      vy = (vy / spd) * MAX_SPEED;
+    } else if (spd < MIN_SPEED && spd > 0) {
+      vx = (vx / spd) * MIN_SPEED;
+      vy = (vy / spd) * MIN_SPEED;
+    }
+
+    x += vx * dt;
+    y += vy * dt;
+
+    // Wall bounce
+    if (x <= 0)    { x = 0;    vx =  Math.abs(vx); }
+    if (x >= maxX) { x = maxX; vx = -Math.abs(vx); }
+    if (y <= 0)    { y = 0;    vy =  Math.abs(vy); }
+    if (y >= maxY) { y = maxY; vy = -Math.abs(vy); }
+
+    // Bob when idle, shake when angry
+    let offsetX = 0, offsetY = 0;
+    if (isAngry) {
+      offsetX = (Math.random() - 0.5) * 4;
+      offsetY = (Math.random() - 0.5) * 4;
+    } else {
+      bobTime += dt;
+      offsetY = Math.sin(bobTime * 7) * 2;
+    }
+    box.style.transform = `translate(${x + offsetX}px, ${y + offsetY}px)`;
+
+    // Dirt throwing when angry
+    if (isAngry && mouseX > -999) {
+      angerCooldown -= dt;
+      if (angerCooldown <= 0) {
+        throwDirt();
+        angerCooldown = THROW_INTERVAL;
+      }
+    } else {
+      angerCooldown = 0;
+    }
+
+    // Idle dig puffs
+    if (!isAngry) {
+      digTimer -= dt;
+      if (digTimer <= 0) {
+        emitDig();
+        digTimer = 0.25 + Math.random() * 0.3;
+      }
+    }
+
+    // ── Canvas draw ─────────────────────────────────────────────
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Splat marks
+    for (let i = splats.length - 1; i >= 0; i--) {
+      const s = splats[i];
+      s.life -= dt;
+      if (s.life <= 0) { splats.splice(i, 1); continue; }
+
+      const a = Math.max(0, s.life / s.maxLife);
+      ctx.save();
+      ctx.globalAlpha = a * 0.82;
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.angle);
+
+      // Outer blob
+      ctx.fillStyle = '#5c3d1e';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, s.rx, s.ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner darker core
+      ctx.globalAlpha = a * 0.65;
+      ctx.fillStyle = '#3a2010';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, s.rx * 0.52, s.ry * 0.52, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Splatter droplets around big impacts
+      if (s.big) {
+        ctx.fillStyle = '#7a5030';
+        for (let j = 0; j < 6; j++) {
+          const ang = (j / 6) * Math.PI * 2;
+          const dr  = s.rx * (0.75 + j * 0.08);
+          ctx.globalAlpha = a * 0.5;
+          ctx.beginPath();
+          ctx.arc(Math.cos(ang) * dr, Math.sin(ang) * dr * 0.6, 3 + j * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // Particles (dig puffs + splash bursts)
+    for (let i = particles.length - 1; i >= 0; i--) {
+      particles[i].update(dt);
+      if (particles[i].life <= 0) { particles.splice(i, 1); continue; }
+      particles[i].draw();
+    }
+
+    // Projectiles
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      projectiles[i].update(dt);
+      if (projectiles[i].dead || projectiles[i].life <= 0) {
+        projectiles.splice(i, 1);
+        continue;
+      }
+      projectiles[i].draw();
+    }
+
+    // Angry eyes (drawn on canvas at truck position)
+    if (isAngry) {
+      const ex = x + offsetX + EYE_RX;
+      const ey = y + offsetY + EYE_RY;
+
+      ctx.save();
+
+      // Glowing red eyes
+      ctx.shadowColor = '#ff3300';
+      ctx.shadowBlur  = 10;
+      ctx.fillStyle   = '#ff2200';
+
+      ctx.beginPath();
+      ctx.ellipse(ex - 5, ey, 3.5, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.ellipse(ex + 5, ey, 3.5, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Black pupils
+      ctx.shadowBlur  = 0;
+      ctx.fillStyle   = '#000';
+      ctx.beginPath();
+      ctx.ellipse(ex - 5, ey + 1.2, 1.5, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(ex + 5, ey + 1.2, 1.5, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Angry eyebrows (V-shape, slanting inward)
+      ctx.strokeStyle = '#cc1100';
+      ctx.lineWidth   = 2;
+      ctx.lineCap     = 'round';
+      ctx.shadowColor = '#ff2200';
+      ctx.shadowBlur  = 5;
+
+      ctx.beginPath();
+      ctx.moveTo(ex - 9, ey - 7);
+      ctx.lineTo(ex - 2, ey - 3.5);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(ex + 9, ey - 7);
+      ctx.lineTo(ex + 2, ey - 3.5);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    requestAnimationFrame(step);
+  }
+
+  const ro = new ResizeObserver(() => {
+    resizeCanvas();
+    x = clamp(x, 0, Math.max(0, zone.clientWidth  - W));
+    y = clamp(y, 0, Math.max(0, zone.clientHeight - H));
+  });
+  ro.observe(zone);
+
+  resizeCanvas();
+  requestAnimationFrame(step);
+})();
+</script>

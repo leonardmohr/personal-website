@@ -1,0 +1,376 @@
+/* src/styles/starlight-custom.css */
+
+/* ============================================================
+   Warm neutral theme — dark (default) + light
+   To use web fonts, add before this file in astro.config.mjs:
+   @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
+   ============================================================ */
+
+@import "katex/dist/katex.min.css";
+
+
+/* ============================================================
+   1. TOKENS — DARK (default)
+   ============================================================ */
+:root {
+  color-scheme: dark;
+
+  /* Starlight accent */
+  --sl-color-accent-low:  #2a1d17;
+  --sl-color-accent:      #c98a63;
+  --sl-color-accent-high: #f2c3a8;
+
+  /* Starlight gray scale — dark: 1 = lightest, 6 = darkest */
+  --sl-color-white:  #f5f2ee;
+  --sl-color-gray-1: #ebe5df;
+  --sl-color-gray-2: #cfc6bf;
+  --sl-color-gray-3: #a49a92;
+  --sl-color-gray-4: #7c736c;
+  --sl-color-gray-5: #5b544e;
+  --sl-color-gray-6: #3a3532;
+  --sl-color-black:  #0a0a0b;
+
+  /* Layout */
+  --sl-content-width: 50rem;
+  --sl-sidebar-width: 20rem;
+
+  /* Typography scale */
+  --sl-text-5xl: 3rem;
+  --sl-text-4xl: 2.4rem;
+  --sl-text-3xl: 1.8rem;
+  --sl-text-2xl: 1.45rem;
+  --sl-text-xl:  1.2rem;
+
+  /* Fonts */
+  --sl-font:      "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sl-font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "Fira Code", monospace;
+
+  /* Surfaces */
+  --bg-base:    #0a0a0b;
+  --bg-surface: #0f1012;
+  --bg-sidebar: #0b0b0d;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-focus:  #c98a63;
+
+  /* Text */
+  --text-primary:   #f5f2ee;
+  --text-secondary: #d3cbc4;
+  --text-muted:     #9b918a;
+
+  /* Interactive */
+  --link-color:       #f2c3a8;
+  --link-hover:       #ffd7c2;
+  --accent-hover-bg:  rgba(201, 138, 99, 0.08);
+  --accent-active-bg: rgba(201, 138, 99, 0.16);
+
+  /* Code */
+  --code-bg:           #111214;
+  --code-inline-color: #f0d2bf;
+  --code-inline-bg:    rgba(255, 255, 255, 0.06);
+
+  /* Table header */
+  --table-header-bg: rgba(255, 255, 255, 0.04);
+
+  /* Selection */
+  --selection-bg:    rgba(201, 138, 99, 0.35);
+  --selection-color: #f5f2ee;
+
+  /* Scrollbar */
+  --scrollbar-track:       #0a0a0b;
+  --scrollbar-thumb:       #3a3532;
+  --scrollbar-thumb-hover: #5b544e;
+}
+
+
+/* ============================================================
+   2. TOKENS — LIGHT
+   ============================================================ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Starlight accent */
+  --sl-color-accent-low:  #f5e6da;
+  --sl-color-accent:      #a8623d;
+  --sl-color-accent-high: #6b3820;
+
+  /* Starlight gray scale — light: 1 = darkest, 6 = lightest */
+  --sl-color-white:  #1a1714;
+  --sl-color-gray-1: #2e2926;
+  --sl-color-gray-2: #4a4340;
+  --sl-color-gray-3: #6e6560;
+  --sl-color-gray-4: #9b9189;
+  --sl-color-gray-5: #c8bfb8;
+  --sl-color-gray-6: #e8e2dc;
+  --sl-color-black:  #f9f7f5;
+
+  /* Surfaces */
+  --bg-base:    #f9f7f5;
+  --bg-surface: #f0ece8;
+  --bg-sidebar: #f4f1ee;
+
+  /* Borders */
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-focus:  #a8623d;
+
+  /* Text */
+  --text-primary:   #1a1714;
+  --text-secondary: #3d3530;
+  --text-muted:     #7a706a;
+
+  /* Interactive */
+  --link-color:       #a8623d;
+  --link-hover:       #6b3820;
+  --accent-hover-bg:  rgba(168, 98, 61, 0.08);
+  --accent-active-bg: rgba(168, 98, 61, 0.14);
+
+  /* Code */
+  --code-bg:           #ebe5df;
+  --code-inline-color: #6b3820;
+  --code-inline-bg:    rgba(0, 0, 0, 0.06);
+
+  /* Table header */
+  --table-header-bg: rgba(0, 0, 0, 0.03);
+
+  /* Selection */
+  --selection-bg:    rgba(168, 98, 61, 0.2);
+  --selection-color: #1a1714;
+
+  /* Scrollbar */
+  --scrollbar-track:       #f9f7f5;
+  --scrollbar-thumb:       #c8bfb8;
+  --scrollbar-thumb-hover: #9b9189;
+}
+
+
+/* ============================================================
+   3. GLOBAL RESETS & BASE
+   ============================================================ */
+
+/* Smooth theme transitions */
+*,
+*::before,
+*::after {
+  transition:
+    background-color 200ms ease,
+    border-color     200ms ease,
+    color            200ms ease,
+    box-shadow       200ms ease;
+}
+
+html,
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
+
+/* Text selection */
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-color);
+}
+
+/* Keyboard focus */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Custom scrollbar (WebKit / Blink) */
+::-webkit-scrollbar            { width: 8px; height: 8px; }
+::-webkit-scrollbar-track      { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb      { background: var(--scrollbar-thumb); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+
+/* ============================================================
+   4. LAYOUT & SURFACES
+   ============================================================ */
+
+main {
+  background: var(--bg-base);
+}
+
+header,
+.header,
+.sl-header {
+  background:
+    radial-gradient(circle at 30% 0%, rgba(201, 138, 99, 0.07), transparent 35%),
+    var(--bg-base);
+  border-bottom: 1px solid var(--border-subtle);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.sidebar-pane,
+.right-sidebar-panel,
+.left-sidebar-panel,
+.starlight-sidebar {
+  background: var(--bg-sidebar);
+}
+
+.right-sidebar-panel,
+nav[aria-label="Table of contents"] {
+  border-left: 1px solid var(--border-subtle);
+}
+
+
+/* ============================================================
+   5. TYPOGRAPHY
+   ============================================================ */
+
+h1 {
+  font-size: clamp(2.2rem, 4vw, 3.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+  margin-bottom: 1.25rem;
+}
+
+h2 {
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+  letter-spacing: -0.02em;
+  margin-top: 2.75rem;
+}
+
+h3 {
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+}
+
+p,
+li {
+  color: var(--text-secondary);
+  line-height: 1.8;
+  font-size: 1.02rem;
+}
+
+a {
+  color: var(--link-color);
+}
+
+a:hover {
+  color: var(--link-hover);
+}
+
+hr {
+  border-color: var(--border-subtle);
+}
+
+
+/* ============================================================
+   6. SIDEBAR NAVIGATION
+   ============================================================ */
+
+.sidebar-content a,
+.sidebar-pane a,
+nav[aria-label="Sidebar"] a {
+  border-radius: 10px;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.sidebar-content a:hover,
+.sidebar-pane a:hover,
+nav[aria-label="Sidebar"] a:hover {
+  background: var(--accent-hover-bg);
+  color: var(--text-primary);
+}
+
+.sidebar-content a[aria-current="page"],
+.sidebar-pane a[aria-current="page"],
+nav[aria-label="Sidebar"] a[aria-current="page"] {
+  background: var(--accent-active-bg);
+  color: var(--link-color);
+  font-weight: 600;
+}
+
+.sidebar-content summary,
+.sidebar-pane summary,
+nav[aria-label="Sidebar"] summary {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+nav[aria-label="Table of contents"] a {
+  color: var(--text-muted);
+}
+
+nav[aria-label="Table of contents"] a:hover,
+nav[aria-label="Table of contents"] a[aria-current="true"] {
+  color: var(--link-color);
+}
+
+
+/* ============================================================
+   7. CODE
+   ============================================================ */
+
+pre {
+  background: var(--code-bg) !important;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+code {
+  border-radius: 6px;
+}
+
+:not(pre) > code {
+  background: var(--code-inline-bg);
+  padding: 0.15rem 0.4rem;
+  color: var(--code-inline-color);
+}
+
+
+/* ============================================================
+   8. SEARCH
+   ============================================================ */
+
+input[type="search"],
+.search-input,
+[role="search"] input {
+  background: var(--code-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  color: var(--text-primary);
+}
+
+input[type="search"]::placeholder,
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+
+/* ============================================================
+   9. COMPONENTS
+   ============================================================ */
+
+/* Asides / callouts */
+.starlight-aside,
+aside {
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--accent-hover-bg);
+}
+
+/* Tables — use separate + border-spacing:0 so border-radius works */
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--bg-surface);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+th,
+td {
+  border-color: var(--border-subtle);
+}
+
+th {
+  background: var(--table-header-bg);
+}
