@@ -69,6 +69,20 @@ import ConstructionTruck from '../assets/construction-truck.astro';
   pointer-events: none;
   z-index: 10;
 }
+
+.sim-section {
+  width: 100%;
+  height: 560px;
+  background: #060c14;
+  position: relative;
+  overflow: hidden;
+}
+
+#simCanvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
 </style>
 
 <section class="hero">
@@ -82,6 +96,15 @@ import ConstructionTruck from '../assets/construction-truck.astro';
   <ConstructionTruck />
   <canvas id="particleCanvas"></canvas>
 </section>
+
+<section class="sim-section" id="simSection">
+  <canvas id="simCanvas"></canvas>
+</section>
+
+<script>
+  import { initSimulation } from '../scripts/simulation.js';
+  initSimulation('simCanvas', 'simSection');
+</script>
 
 <script>
 (() => {
