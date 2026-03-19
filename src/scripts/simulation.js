@@ -1,5 +1,5 @@
 // simulation.js
-// Objective 6: Agent needs — hunger, energy, sleep with decay, effects, and status bars
+// Objective 7: Resource harvesting — agents collect wood from trees; trees deplete and respawn
 
 const TILE_SIZE = 16;
 const WORLD_W   = 200;
@@ -22,11 +22,9 @@ const STYLE = [
   ['#2a7018','#40a028','#164010'],
   null, null,
 ];
-
 const IRON_DOTS = [[0.20,0.25],[0.62,0.18],[0.72,0.58],[0.28,0.65],[0.48,0.40]];
 const COAL_DOTS = [[0.18,0.30],[0.58,0.22],[0.70,0.62],[0.32,0.68],[0.44,0.42]];
 
-// ── Materials (obj 3) ──────────────────────────────────────────────────────────
 export const MATERIAL = Object.freeze({
   WOOD:  {id:0,name:'Wood',      color:'#8b5a2b',strength:30, weight:5, durability:40, buildTime:2.0,harvestTime:3.0, carryLimit:20,towerScore:1.0,requiresTool:false,source:TILE.TREE_TRUNK,recipe:null},
   STONE: {id:1,name:'Stone',     color:'#808080',strength:55, weight:14,durability:80, buildTime:4.0,harvestTime:6.0, carryLimit:12,towerScore:1.8,requiresTool:true, source:TILE.STONE,    recipe:null},
@@ -36,22 +34,12 @@ export const MATERIAL = Object.freeze({
 });
 export const MATERIALS_BY_SCORE = Object.values(MATERIAL).filter(m=>m.towerScore>0).sort((a,b)=>b.towerScore-a.towerScore);
 
-// ── Needs decay/recovery constants ────────────────────────────────────────────
 const NEEDS = Object.freeze({
-  //                          per-second rates
-  HUNGER_DRAIN:       0.9,   // awake always
-  ENERGY_DRAIN_WALK:  0.8,   // while walking
-  ENERGY_DRAIN_IDLE:  0.22,  // while idle / resting
-  ENERGY_RECOVER:     3.2,   // while sleeping
-  SLEEP_DRAIN:        0.38,  // while awake
-  SLEEP_RECOVER:      2.8,   // while sleeping
-  // Thresholds
-  SLEEP_TRIGGER:      15,    // enter sleep below this energy
-  SLEEP_RELEASE:      80,    // wake when energy reaches this
-  HUNGER_ENERGY_MULT: 2.0,   // energy drains this × faster when hunger < 25
+  HUNGER_DRAIN:0.9, ENERGY_DRAIN_WALK:0.8, ENERGY_DRAIN_IDLE:0.22,
+  ENERGY_RECOVER:3.2, SLEEP_DRAIN:0.38, SLEEP_RECOVER:2.8,
+  SLEEP_TRIGGER:15, SLEEP_RELEASE:80, HUNGER_ENERGY_MULT:2.0,
 });
 
-// ── Agent colours ──────────────────────────────────────────────────────────────
 const AGENT_COLORS = [
   {shirt:'#c83820',pants:'#2a3858',skin:'#f0c088',hair:'#281408',shoe:'#181008'},
   {shirt:'#2248c0',pants:'#3a2818',skin:'#f0c088',hair:'#180e04',shoe:'#100808'},
@@ -61,11 +49,11 @@ const AGENT_COLORS = [
   {shirt:'#18a0a8',pants:'#2e2416',skin:'#d8a870',hair:'#180804',shoe:'#100808'},
 ];
 
-// ── A* (obj 5) ─────────────────────────────────────────────────────────────────
+// ── A* ─────────────────────────────────────────────────────────────────────────
 function aStar(startCol, goalCol, surfaceYPx) {
-  if (startCol === goalCol) return [startCol];
-  startCol = Math.max(0, Math.min(WORLD_W-1, startCol));
-  goalCol  = Math.max(0, Math.min(WORLD_W-1, goalCol));
+  if (startCol===goalCol) return [startCol];
+  startCol=Math.max(0,Math.min(WORLD_W-1,startCol));
+  goalCol =Math.max(0,Math.min(WORLD_W-1,goalCol));
   const INF=1e9;
   const gScore=new Float32Array(WORLD_W).fill(INF);
   const fScore=new Float32Array(WORLD_W).fill(INF);
@@ -73,18 +61,17 @@ function aStar(startCol, goalCol, surfaceYPx) {
   const inOpen=new Uint8Array(WORLD_W);
   gScore[startCol]=0; fScore[startCol]=Math.abs(goalCol-startCol); inOpen[startCol]=1;
   const open=[startCol];
-  while (open.length>0) {
-    let mi=0;
-    for (let i=1;i<open.length;i++) if(fScore[open[i]]<fScore[open[mi]]) mi=i;
+  while(open.length>0){
+    let mi=0; for(let i=1;i<open.length;i++) if(fScore[open[i]]<fScore[open[mi]]) mi=i;
     const cur=open[mi]; open.splice(mi,1); inOpen[cur]=0;
-    if (cur===goalCol) { const p=[]; for(let c=cur;c!==-1;c=cameFrom[c]) p.unshift(c); return p; }
-    for (const nb of [cur-1,cur+1]) {
+    if(cur===goalCol){const p=[];for(let c=cur;c!==-1;c=cameFrom[c])p.unshift(c);return p;}
+    for(const nb of[cur-1,cur+1]){
       if(nb<0||nb>=WORLD_W) continue;
       if(Math.abs(surfaceYPx[nb]-surfaceYPx[cur])>TILE_SIZE) continue;
       const tg=gScore[cur]+1;
-      if(tg<gScore[nb]) {
-        cameFrom[nb]=cur; gScore[nb]=tg; fScore[nb]=tg+Math.abs(goalCol-nb);
-        if(!inOpen[nb]) { inOpen[nb]=1; open.push(nb); }
+      if(tg<gScore[nb]){
+        cameFrom[nb]=cur;gScore[nb]=tg;fScore[nb]=tg+Math.abs(goalCol-nb);
+        if(!inOpen[nb]){inOpen[nb]=1;open.push(nb);}
       }
     }
   }
@@ -99,34 +86,47 @@ class Agent {
     this.y           = worldY;
     this.vx          = 0;
     this.facingRight = true;
-    this.state       = 'idle';   // 'idle' | 'walk' | 'sleep'
+    this.state       = 'idle';   // idle | walk | sleep | harvest
     this.stateTimer  = Math.random() * 2;
     this.animTime    = Math.random() * 20;
     this.colors      = AGENT_COLORS[id % AGENT_COLORS.length];
     this.baseSpeed   = 16 + Math.random() * 12;
 
-    // Needs — staggered starting values so agents don't all sleep at once
+    // Needs
     this.hunger = 55 + Math.random() * 40;
     this.energy = 55 + Math.random() * 40;
     this.sleep  = 50 + Math.random() * 45;
 
-    // Pathfinding
-    this.path    = [];
-    this.pathIdx = 0;
-    this.goalCol = -1;
+    // Inventory
+    this.inventory = { wood: 0 };
+
+    // Pathfinding / task
+    this.path        = [];
+    this.pathIdx     = 0;
+    this.goalCol     = -1;
+    this.nextAction  = null;    // 'harvest' | null — action on arrival
+    this.targetTree  = null;
+    this.harvestTimer = 0;      // counts up toward MATERIAL.WOOD.harvestTime
   }
 
-  // Effective speed — reduced when tired or starving
   get speed() {
-    const energyFactor = 0.3 + 0.7 * (this.energy / 100);
-    const hungerFactor = this.hunger < 20 ? 0.5 + 0.5 * (this.hunger / 20) : 1.0;
-    return this.baseSpeed * energyFactor * hungerFactor;
+    return this.baseSpeed
+      * (0.3 + 0.7 * (this.energy / 100))
+      * (this.hunger < 20 ? 0.5 + 0.5 * (this.hunger / 20) : 1.0);
   }
-
-  // Maximum energy achievable — capped by sleep debt
   get maxEnergy() { return Math.max(30, this.sleep); }
 
-  chooseGoal(surfaceYPx) {
+  // ── Goal selection ─────────────────────────────────────────────
+  chooseGoal(surfaceYPx, trees) {
+    const canCarryMore = this.inventory.wood < MATERIAL.WOOD.carryLimit;
+    if (canCarryMore && Math.random() < 0.55) {
+      this._chooseHarvestGoal(surfaceYPx, trees);
+    } else {
+      this._chooseWalkGoal(surfaceYPx);
+    }
+  }
+
+  _chooseWalkGoal(surfaceYPx) {
     const curCol = Math.max(0, Math.min(WORLD_W-1, Math.floor(this.x / TILE_SIZE)));
     let targetCol;
     for (let a=0; a<8; a++) {
@@ -135,215 +135,248 @@ class Agent {
     }
     const path = aStar(curCol, targetCol, surfaceYPx);
     if (path && path.length > 1) {
-      this.path=path; this.pathIdx=1; this.goalCol=targetCol; this.state='walk';
+      this.path=path; this.pathIdx=1; this.goalCol=targetCol;
+      this.nextAction=null; this.state='walk';
     } else {
       this.state='idle'; this.stateTimer=1+Math.random()*2; this.goalCol=-1;
     }
   }
 
-  updateNeeds(dt) {
-    const hungry = this.hunger < 25;
-    const energyMult = hungry ? NEEDS.HUNGER_ENERGY_MULT : 1.0;
+  _chooseHarvestGoal(surfaceYPx, trees) {
+    const curCol = Math.max(0, Math.min(WORLD_W-1, Math.floor(this.x / TILE_SIZE)));
+    // Find nearest alive tree not already targeted by another close agent
+    let best=null, bestDist=Infinity;
+    for (const t of trees) {
+      if (t.state !== 'alive') continue;
+      const d = Math.abs(t.col - curCol);
+      if (d < bestDist) { best=t; bestDist=d; }
+    }
+    if (!best) { this._chooseWalkGoal(surfaceYPx); return; }
 
-    // Hunger always drains
-    this.hunger = Math.max(0, this.hunger - NEEDS.HUNGER_DRAIN * dt);
-
-    if (this.state === 'sleep') {
-      this.energy = Math.min(this.maxEnergy, this.energy + NEEDS.ENERGY_RECOVER * dt);
-      this.sleep  = Math.min(100,            this.sleep  + NEEDS.SLEEP_RECOVER  * dt);
+    const path = aStar(curCol, best.col, surfaceYPx);
+    if (path && path.length > 0) {
+      this.path=path; this.pathIdx=Math.min(1,path.length-1);
+      this.goalCol=best.col; this.targetTree=best;
+      this.nextAction='harvest'; this.state='walk';
     } else {
-      const drain = this.state === 'walk' ? NEEDS.ENERGY_DRAIN_WALK : NEEDS.ENERGY_DRAIN_IDLE;
-      this.energy = Math.max(0, this.energy - drain * energyMult * dt);
-      this.sleep  = Math.max(0, this.sleep  - NEEDS.SLEEP_DRAIN * dt);
+      this._chooseWalkGoal(surfaceYPx);
     }
   }
 
-  update(dt, surfaceYPx) {
+  // ── Needs ──────────────────────────────────────────────────────
+  updateNeeds(dt) {
+    const mult = this.hunger < 25 ? NEEDS.HUNGER_ENERGY_MULT : 1.0;
+    this.hunger = Math.max(0, this.hunger - NEEDS.HUNGER_DRAIN * dt);
+    if (this.state === 'sleep') {
+      this.energy = Math.min(this.maxEnergy, this.energy + NEEDS.ENERGY_RECOVER * dt);
+      this.sleep  = Math.min(100, this.sleep + NEEDS.SLEEP_RECOVER * dt);
+    } else {
+      const drain = this.state==='walk'||this.state==='harvest'
+        ? NEEDS.ENERGY_DRAIN_WALK : NEEDS.ENERGY_DRAIN_IDLE;
+      this.energy = Math.max(0, this.energy - drain * mult * dt);
+      this.sleep  = Math.max(0, this.sleep - NEEDS.SLEEP_DRAIN * dt);
+    }
+  }
+
+  // ── Main update ────────────────────────────────────────────────
+  update(dt, surfaceYPx, trees) {
     this.animTime += dt;
     this.updateNeeds(dt);
 
-    // ── Sleep trigger / release ────────────────────────────────
+    // Sleep override
     if (this.state !== 'sleep' && this.energy < NEEDS.SLEEP_TRIGGER) {
-      this.state   = 'sleep';
-      this.path    = [];
-      this.goalCol = -1;
-      this.vx      = 0;
-      return;
+      this.state='sleep'; this.path=[]; this.goalCol=-1; this.vx=0;
+      this.targetTree=null; return;
     }
     if (this.state === 'sleep') {
-      if (this.energy >= NEEDS.SLEEP_RELEASE) {
-        this.state      = 'idle';
-        this.stateTimer = 0.5 + Math.random();
+      if (this.energy >= NEEDS.SLEEP_RELEASE) { this.state='idle'; this.stateTimer=0.5+Math.random(); }
+      return;
+    }
+
+    // ── Harvest state ──────────────────────────────────────────
+    if (this.state === 'harvest') {
+      this.vx = 0;
+      if (!this.targetTree || this.targetTree.state !== 'alive'
+          || this.inventory.wood >= MATERIAL.WOOD.carryLimit) {
+        this.targetTree=null; this.state='idle'; this.stateTimer=0.5+Math.random()*1.5;
+        return;
+      }
+      this.harvestTimer += dt;
+      if (this.harvestTimer >= MATERIAL.WOOD.harvestTime) {
+        this.harvestTimer = 0;
+        this.inventory.wood += this.targetTree.harvest();
       }
       return;
     }
 
-    // ── Normal state machine ───────────────────────────────────
+    // ── Idle ───────────────────────────────────────────────────
     if (this.state === 'idle') {
       this.vx = 0;
       this.stateTimer -= dt;
-      if (this.stateTimer <= 0) this.chooseGoal(surfaceYPx);
+      if (this.stateTimer <= 0) this.chooseGoal(surfaceYPx, trees);
+      return;
+    }
 
-    } else { // walk
-      if (this.pathIdx >= this.path.length) {
-        this.path=[]; this.goalCol=-1; this.state='idle';
-        this.stateTimer=1+Math.random()*3; this.vx=0;
-        return;
-      }
-      const wpCol = this.path[this.pathIdx];
-      const wpX   = wpCol * TILE_SIZE + TILE_SIZE / 2;
-      const dx    = wpX - this.x;
-      if (Math.abs(dx) < 1.5) {
-        this.x=wpX; this.y=surfaceYPx[wpCol]; this.pathIdx++;
+    // ── Walk ───────────────────────────────────────────────────
+    if (this.pathIdx >= this.path.length) {
+      // Arrived — dispatch next action
+      if (this.nextAction === 'harvest' && this.targetTree?.state === 'alive') {
+        this.state='harvest'; this.harvestTimer=0;
+        this.facingRight = (this.targetTree.col * TILE_SIZE) >= this.x;
+        this.nextAction=null;
       } else {
-        this.vx=Math.sign(dx)*this.speed; this.facingRight=dx>0;
-        this.x+=this.vx*dt;
-        const col=Math.max(0,Math.min(WORLD_W-1,Math.floor(this.x/TILE_SIZE)));
-        this.y=surfaceYPx[col];
+        this.path=[]; this.goalCol=-1; this.nextAction=null; this.targetTree=null;
+        this.state='idle'; this.stateTimer=1+Math.random()*3; this.vx=0;
       }
+      return;
+    }
+
+    const wpCol = this.path[this.pathIdx];
+    const wpX   = wpCol * TILE_SIZE + TILE_SIZE / 2;
+    const dx    = wpX - this.x;
+    if (Math.abs(dx) < 1.5) {
+      this.x=wpX; this.y=surfaceYPx[wpCol]; this.pathIdx++;
+    } else {
+      this.vx=Math.sign(dx)*this.speed; this.facingRight=dx>0;
+      this.x+=this.vx*dt;
+      const col=Math.max(0,Math.min(WORLD_W-1,Math.floor(this.x/TILE_SIZE)));
+      this.y=surfaceYPx[col];
     }
   }
 }
 
-// ── Sprite drawing ─────────────────────────────────────────────────────────────
+// ── Sprite ─────────────────────────────────────────────────────────────────────
 function drawAgent(ctx, agent, cam) {
   const z  = cam.zoom;
   const sx = Math.round(agent.x * z - cam.x);
   const sy = Math.round(agent.y * z - cam.y);
   const c  = agent.colors;
 
-  const r = (lx, ly, w, h, col) => {
-    ctx.fillStyle = col;
-    ctx.fillRect(Math.round(sx+lx*z), Math.round(sy+ly*z),
-      Math.max(1,Math.round(w*z)), Math.max(1,Math.round(h*z)));
+  const r = (lx,ly,w,h,col)=>{
+    ctx.fillStyle=col;
+    ctx.fillRect(Math.round(sx+lx*z),Math.round(sy+ly*z),Math.max(1,Math.round(w*z)),Math.max(1,Math.round(h*z)));
   };
 
-  // Ground shadow
-  ctx.save();
-  ctx.fillStyle='rgba(0,0,0,0.22)';
-  ctx.beginPath();
-  ctx.ellipse(sx, sy, Math.round(6*z), Math.round(2*z), 0, 0, Math.PI*2);
-  ctx.fill();
-  ctx.restore();
+  // Shadow
+  ctx.save(); ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.beginPath();
+  ctx.ellipse(sx,sy,Math.round(6*z),Math.round(2*z),0,0,Math.PI*2); ctx.fill(); ctx.restore();
 
   if (agent.state === 'sleep') {
-    // ── Sleeping pose — curled up horizontally ─────────────
-    r(-8, -5,  14, 5, c.pants);   // body
-    r(-8, -5,   6, 5, c.shirt);   // shirt part
-    r( 5, -8,   6, 6, c.skin);    // head at right end
-    r( 5, -8,   6, 2, c.hair);
-
-    // Floating Zzz
-    const zt = agent.animTime;
-    const za = Math.max(0, Math.sin(zt * 0.9));
-    if (z >= 1.4) {
-      ctx.save();
-      ctx.globalAlpha = za * 0.85;
-      ctx.fillStyle   = '#aaccee';
-      ctx.font        = `bold ${Math.max(7, ~~(7*z))}px monospace`;
-      ctx.textAlign   = 'center';
-      const offY = (zt * 14 % (16*z));
-      ctx.fillText('z', sx + Math.round(9*z), sy - Math.round(10*z) - offY);
-      ctx.globalAlpha = za * 0.55;
-      ctx.fillText('Z', sx + Math.round(14*z), sy - Math.round(18*z) - offY);
+    r(-8,-5,14,5,c.pants); r(-8,-5,6,5,c.shirt);
+    r(5,-8,6,6,c.skin); r(5,-8,6,2,c.hair);
+    if (z>=1.4) {
+      const zt=agent.animTime, za=Math.max(0,Math.sin(zt*0.9));
+      const offY=(zt*14%(16*z));
+      ctx.save(); ctx.fillStyle='#aaccee'; ctx.textAlign='center';
+      ctx.globalAlpha=za*0.85; ctx.font=`bold ${Math.max(7,~~(7*z))}px monospace`;
+      ctx.fillText('z',sx+Math.round(9*z),sy-Math.round(10*z)-offY);
+      ctx.globalAlpha=za*0.55; ctx.fillText('Z',sx+Math.round(14*z),sy-Math.round(18*z)-offY);
       ctx.restore();
+    }
+
+  } else if (agent.state === 'harvest') {
+    // Chopping pose: body upright, front arm raised and swinging
+    const prog   = agent.harvestTimer / MATERIAL.WOOD.harvestTime;
+    const chopY  = -Math.abs(Math.sin(prog * Math.PI)) * 6; // arm swings up then down
+    const flip   = agent.facingRight ? 1 : -1;
+
+    r(-1,-9,3,9,c.pants); r(-1,-1,3,1,c.shoe);   // back leg (static)
+    r(-4,-15,8,6,c.shirt);                         // torso
+    r(-6,-14,2,5,c.skin);                          // back arm (static)
+    // Front arm swings (ax hand) — toward tree
+    r(flip>0?4:-6,-14+chopY,2,5,c.skin);
+    // Axe head at end of swing
+    if (z>=1.5) {
+      ctx.fillStyle='#a0a0a8';
+      ctx.fillRect(Math.round(sx+(flip>0?6:-8)*z),Math.round(sy+(-14+chopY-2)*z),Math.max(1,Math.round(3*z)),Math.max(1,Math.round(4*z)));
+    }
+    r(-4,-9,3,9,c.pants); r(-4,-1,3,1,c.shoe);    // front leg
+    r(-3,-22,6,7,c.skin); r(-3,-22,6,2,c.hair);
+    if (agent.facingRight) {r(1,-19,1,1,'#080808');r(3,-19,1,1,'#080808');}
+    else                   {r(-4,-19,1,1,'#080808');r(-2,-19,1,1,'#080808');}
+
+    // Harvest progress bar below feet
+    if (z>=1.4) {
+      const bw=Math.round(18*z), bh=Math.max(2,Math.round(2*z));
+      const bx=sx-Math.round(9*z);
+      ctx.fillStyle='#1a2a30'; ctx.fillRect(bx,sy+Math.round(2*z),bw,bh);
+      ctx.fillStyle='#8b5a2b'; ctx.fillRect(bx,sy+Math.round(2*z),Math.round(prog*bw),bh);
     }
 
   } else {
-    // ── Walking / idle pose ────────────────────────────────
-    const walking = agent.state === 'walk';
-    const ph      = agent.animTime * 6;
-    const bob     = walking ? Math.abs(Math.sin(ph*2))*-1 : Math.sin(agent.animTime*1.5)*-0.4;
-    const leg1Up  = walking ? Math.max(0, Math.sin(ph))          *3 : 0;
-    const leg2Up  = walking ? Math.max(0, Math.sin(ph+Math.PI))  *3 : 0;
-    const arm1dy  = walking ? Math.sin(ph+Math.PI)*2 : 0;
-    const arm2dy  = walking ? Math.sin(ph)*2          : 0;
-
-    const rb = (lx, ly, w, h, col) => r(lx, ly+bob, w, h, col);
-
-    ctx.save(); ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.restore();
-
-    rb(-1, -9+leg2Up, 3, 9-leg2Up, c.pants); rb(-1,-1,3,1,c.shoe);
+    const walking=agent.state==='walk';
+    const ph=agent.animTime*6;
+    const bob=walking?Math.abs(Math.sin(ph*2))*-1:Math.sin(agent.animTime*1.5)*-0.4;
+    const l1=walking?Math.max(0,Math.sin(ph))*3:0;
+    const l2=walking?Math.max(0,Math.sin(ph+Math.PI))*3:0;
+    const a1=walking?Math.sin(ph+Math.PI)*2:0;
+    const a2=walking?Math.sin(ph)*2:0;
+    const rb=(lx,ly,w,h,col)=>r(lx,ly+bob,w,h,col);
+    rb(-1,-9+l2,3,9-l2,c.pants); rb(-1,-1,3,1,c.shoe);
     rb(-4,-15,8,6,c.shirt);
-    rb(-6,-14+arm1dy,2,5,c.skin); rb(4,-14+arm2dy,2,5,c.skin);
-    rb(-4,-9+leg1Up,3,9-leg1Up,c.pants); rb(-4,-1,3,1,c.shoe);
+    rb(-6,-14+a1,2,5,c.skin); rb(4,-14+a2,2,5,c.skin);
+    rb(-4,-9+l1,3,9-l1,c.pants); rb(-4,-1,3,1,c.shoe);
     rb(-3,-22,6,7,c.skin); rb(-3,-22,6,2,c.hair);
-    if (agent.facingRight) { rb(1,-19,1,1,'#080808'); rb(3,-19,1,1,'#080808'); }
-    else                   { rb(-4,-19,1,1,'#080808'); rb(-2,-19,1,1,'#080808'); }
-
-    if (z >= 1.8) {
-      ctx.save();
-      ctx.font=`bold ${Math.max(8,~~(6.5*z))}px monospace`;
+    if (agent.facingRight){rb(1,-19,1,1,'#080808');rb(3,-19,1,1,'#080808');}
+    else                  {rb(-4,-19,1,1,'#080808');rb(-2,-19,1,1,'#080808');}
+    if (z>=1.8){
+      ctx.save(); ctx.font=`bold ${Math.max(8,~~(6.5*z))}px monospace`;
       ctx.fillStyle=c.shirt; ctx.textAlign='center';
-      ctx.fillText(`A${agent.id+1}`, sx, sy-~~(25*z)-2);
-      ctx.restore();
+      ctx.fillText(`A${agent.id+1}`,sx,sy-~~(25*z)-2); ctx.restore();
     }
   }
 
-  // ── Status bars (hunger, energy, sleep) ───────────────────
-  if (z >= 1.4) {
-    const bw = Math.round(18 * z);   // bar width
-    const bh = Math.max(2, Math.round(2.5 * z));
-    const bx = sx - Math.round(9 * z);
-    const topY = sy - Math.round((agent.state==='sleep' ? 14 : 28) * z) - bh*3 - 4;
-
-    const bars = [
-      { val: agent.hunger,        max:100,          color:'#48c840', label:'H' },
-      { val: agent.energy,        max: agent.maxEnergy, color:'#e8c030', label:'E' },
-      { val: agent.sleep,         max:100,          color:'#4898e8', label:'S' },
-    ];
-    bars.forEach((b, i) => {
-      const by  = topY + i * (bh + 1);
-      const pct = Math.max(0, Math.min(1, b.val / b.max));
-      const col = pct < 0.25 ? '#e83030' : pct < 0.5 ? '#e09020' : b.color;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(bx-1, by-1, bw+2, bh+2);
-      ctx.fillStyle = '#1a2a30';
-      ctx.fillRect(bx, by, bw, bh);
-      ctx.fillStyle = col;
-      ctx.fillRect(bx, by, Math.round(pct * bw), bh);
+  // Status bars (H/E/S)
+  if (z>=1.4) {
+    const bw=Math.round(18*z), bh=Math.max(2,Math.round(2.5*z));
+    const bx=sx-Math.round(9*z);
+    const topY=sy-Math.round((agent.state==='sleep'?14:28)*z)-bh*3-4;
+    [{val:agent.hunger,max:100,color:'#48c840'},
+     {val:agent.energy,max:agent.maxEnergy,color:'#e8c030'},
+     {val:agent.sleep, max:100,color:'#4898e8'}
+    ].forEach((b,i)=>{
+      const by=topY+i*(bh+1), pct=Math.max(0,Math.min(1,b.val/b.max));
+      ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(bx-1,by-1,bw+2,bh+2);
+      ctx.fillStyle='#1a2a30';         ctx.fillRect(bx,by,bw,bh);
+      ctx.fillStyle=pct<0.25?'#e83030':pct<0.5?'#e09020':b.color;
+      ctx.fillRect(bx,by,Math.round(pct*bw),bh);
     });
   }
 }
 
-// ── A* path visualisation ─────────────────────────────────────────────────────
+// ── Path visualisation ─────────────────────────────────────────────────────────
 function drawPaths(ctx, agents, surfaceYPx, cam) {
   const z=cam.zoom;
-  for (const agent of agents) {
-    if (!agent.path.length || agent.pathIdx>=agent.path.length) continue;
-    ctx.save();
-    ctx.strokeStyle=agent.colors.shirt; ctx.globalAlpha=0.4;
-    ctx.lineWidth=Math.max(1,z*0.8);
-    ctx.setLineDash([Math.round(3*z),Math.round(4*z)]);
-    ctx.beginPath();
-    ctx.moveTo(Math.round(agent.x*z-cam.x), Math.round(agent.y*z-cam.y));
-    for (let i=agent.pathIdx;i<agent.path.length;i++) {
-      const col=agent.path[i];
-      ctx.lineTo(Math.round((col*TILE_SIZE+TILE_SIZE/2)*z-cam.x), Math.round(surfaceYPx[col]*z-cam.y));
+  for (const a of agents) {
+    if (!a.path.length||a.pathIdx>=a.path.length) continue;
+    ctx.save(); ctx.strokeStyle=a.colors.shirt; ctx.globalAlpha=0.4;
+    ctx.lineWidth=Math.max(1,z*0.8); ctx.setLineDash([Math.round(3*z),Math.round(4*z)]);
+    ctx.beginPath(); ctx.moveTo(Math.round(a.x*z-cam.x),Math.round(a.y*z-cam.y));
+    for(let i=a.pathIdx;i<a.path.length;i++){
+      const col=a.path[i];
+      ctx.lineTo(Math.round((col*TILE_SIZE+TILE_SIZE/2)*z-cam.x),Math.round(surfaceYPx[col]*z-cam.y));
     }
     ctx.stroke(); ctx.setLineDash([]);
-    if (agent.goalCol>=0) {
-      const gx=Math.round((agent.goalCol*TILE_SIZE+TILE_SIZE/2)*z-cam.x);
-      const gy=Math.round(surfaceYPx[agent.goalCol]*z-cam.y);
-      const fh=Math.round(10*z);
+    if (a.goalCol>=0) {
+      const gx=Math.round((a.goalCol*TILE_SIZE+TILE_SIZE/2)*z-cam.x);
+      const gy=Math.round(surfaceYPx[a.goalCol]*z-cam.y), fh=Math.round(10*z);
       ctx.globalAlpha=0.85; ctx.lineWidth=Math.max(1,z*0.7);
       ctx.beginPath(); ctx.moveTo(gx,gy); ctx.lineTo(gx,gy-fh); ctx.stroke();
-      ctx.fillStyle=agent.colors.shirt; ctx.globalAlpha=0.9;
-      ctx.beginPath();
-      ctx.moveTo(gx,gy-fh); ctx.lineTo(gx+Math.round(6*z),gy-fh+Math.round(3*z)); ctx.lineTo(gx,gy-fh+Math.round(6*z));
-      ctx.fill();
+      ctx.fillStyle=a.colors.shirt; ctx.globalAlpha=0.9;
+      ctx.beginPath(); ctx.moveTo(gx,gy-fh);
+      ctx.lineTo(gx+Math.round(6*z),gy-fh+Math.round(3*z));
+      ctx.lineTo(gx,gy-fh+Math.round(6*z)); ctx.fill();
     }
     ctx.restore();
   }
 }
 
-// ── Agent needs panel ──────────────────────────────────────────────────────────
+// ── Needs + inventory panel ────────────────────────────────────────────────────
 function drawNeedsPanel(ctx, agents, W, H) {
-  const ROW=13, PAD=7, PW=260;
-  const heads=['AGENT','STATE','HUNGER','ENERGY','SLEEP'];
-  const PH=(agents.length+2)*ROW+PAD*2;
-  const px=W-PW-10, py=H-PH-10;
-  const cx=[px+PAD,px+62,px+108,px+162,px+212];
+  const ROW=13,PAD=7,PW=296;
+  const heads=['AGT','STATE','HGR','NRG','SLP','WOOD'];
+  const PH=(agents.length+2)*ROW+PAD*2, px=W-PW-10, py=H-PH-10;
+  const cx=[px+PAD,px+46,px+96,px+142,px+190,px+246];
 
   ctx.fillStyle='rgba(6,12,20,0.88)'; ctx.fillRect(px,py,PW,PH);
   ctx.strokeStyle='#2a4050'; ctx.lineWidth=1; ctx.strokeRect(px+.5,py+.5,PW-1,PH-1);
@@ -351,31 +384,31 @@ function drawNeedsPanel(ctx, agents, W, H) {
   for(let i=0;i<heads.length;i++) ctx.fillText(heads[i],cx[i],py+PAD+ROW-2);
   ctx.fillStyle='#2a4050'; ctx.fillRect(px+PAD,py+PAD+ROW+1,PW-PAD*2,1);
 
-  for (let i=0;i<agents.length;i++) {
-    const a=agents[i], ry=py+PAD+(i+2)*ROW-2;
-    const stateCol={idle:'#8aaa70',walk:'#70aacc',sleep:'#8888ee'}[a.state]||'#888';
+  const drawBar=(x,y,val,max,col)=>{
+    const bw=40,bh=6,pct=Math.max(0,Math.min(1,val/max));
+    const fc=pct<0.25?'#e83030':pct<0.5?'#e09020':col;
+    ctx.fillStyle='#1a2a30'; ctx.fillRect(x,y-8,bw,bh);
+    ctx.fillStyle=fc;        ctx.fillRect(x,y-8,Math.round(pct*bw),bh);
+    ctx.strokeStyle='#2a4050'; ctx.lineWidth=0.5; ctx.strokeRect(x,y-8,bw,bh);
+    ctx.fillStyle='#7a9aaa'; ctx.font='8px monospace';
+    ctx.fillText(~~val,x+bw+3,y);
+  };
 
+  for(let i=0;i<agents.length;i++){
+    const a=agents[i], ry=py+PAD+(i+2)*ROW-2;
     ctx.font='bold 9px monospace';
     ctx.fillStyle=a.colors.shirt; ctx.fillRect(cx[0],ry-8,7,7);
     ctx.fillStyle='#9ab0bc'; ctx.fillText(`A${a.id+1}`,cx[0]+9,ry);
-
     ctx.font='9px monospace';
-    ctx.fillStyle=stateCol; ctx.fillText(a.state,cx[1],ry);
-
-    // Inline mini-bars for each need
-    const drawBar=(x,val,max,col)=>{
-      const bw=44, bh=6, pct=Math.max(0,Math.min(1,val/max));
-      const fc=pct<0.25?'#e83030':pct<0.5?'#e09020':col;
-      ctx.fillStyle='#1a2a30'; ctx.fillRect(x,ry-8,bw,bh);
-      ctx.fillStyle=fc;        ctx.fillRect(x,ry-8,Math.round(pct*bw),bh);
-      ctx.fillStyle='#506070'; ctx.strokeStyle='#2a4050';
-      ctx.lineWidth=0.5; ctx.strokeRect(x,ry-8,bw,bh);
-      ctx.fillStyle='#9ab0bc'; ctx.font='8px monospace';
-      ctx.fillText(~~val,x+bw+3,ry);
-    };
-    drawBar(cx[2],      a.hunger, 100,         '#48c840');
-    drawBar(cx[3],      a.energy, a.maxEnergy, '#e8c030');
-    drawBar(cx[4],      a.sleep,  100,         '#4898e8');
+    ctx.fillStyle={idle:'#8aaa70',walk:'#70aacc',sleep:'#8888ee',harvest:'#c8a040'}[a.state]||'#888';
+    ctx.fillText(a.state,cx[1],ry);
+    drawBar(cx[2],ry,a.hunger,100,'#48c840');
+    drawBar(cx[3],ry,a.energy,a.maxEnergy,'#e8c030');
+    drawBar(cx[4],ry,a.sleep,100,'#4898e8');
+    // Wood inventory count
+    ctx.fillStyle=a.inventory.wood>0?'#c8a060':'#4a6878';
+    ctx.font='bold 9px monospace';
+    ctx.fillText(`🪵${a.inventory.wood}`,cx[5],ry);
   }
 }
 
@@ -384,19 +417,61 @@ export function initSimulation(canvasId, sectionId) {
   const canvas  = document.getElementById(canvasId);
   const section = document.getElementById(sectionId);
   if (!canvas || !section) return;
-
-  const ctx=canvas.getContext('2d');
-  ctx.imageSmoothingEnabled=false;
+  const ctx=canvas.getContext('2d'); ctx.imageSmoothingEnabled=false;
   const cam={x:0,y:0,zoom:2,minZoom:0.5,maxZoom:6};
 
-  // ── World ─────────────────────────────────────────────────────────
-  const tiles=new Uint8Array(WORLD_W*WORLD_H);
-  const surfaceYPx=new Uint16Array(WORLD_W);
-  let avgSurfaceRow=60;
+  const tiles      = new Uint8Array(WORLD_W * WORLD_H);
+  const surfaceYPx = new Uint16Array(WORLD_W);
+  const trees      = [];  // Tree instances (defined below, created in generate)
+  let avgSurfaceRow = 60;
 
+  // ── Tree class (closes over tiles) ────────────────────────────
+  class Tree {
+    constructor(col, surfRow, topRow, leafTiles, woodAmt) {
+      this.col       = col;
+      this.surfRow   = surfRow;   // grass tile row (never overwritten)
+      this.topRow    = topRow;    // topmost trunk tile row
+      this.leafTiles = leafTiles; // [[row, col], ...]
+      this.woodMax   = woodAmt;
+      this.wood      = woodAmt;
+      this.state     = 'alive';   // 'alive' | 'depleted'
+      this.respawnTimer = 0;
+      this.respawnTime  = 35 + Math.random() * 25;
+    }
+    harvest() {
+      if (this.wood <= 0 || this.state !== 'alive') return 0;
+      this.wood--;
+      if (this.wood === 0) this._deplete();
+      return 1;
+    }
+    _deplete() {
+      this.state = 'depleted';
+      for (let r = this.topRow; r < this.surfRow; r++)
+        tiles[r * WORLD_W + this.col] = TILE.SKY;
+      for (const [lr,lc] of this.leafTiles)
+        if (tiles[lr * WORLD_W + lc] === TILE.TREE_LEAVES) tiles[lr * WORLD_W + lc] = TILE.SKY;
+      this.respawnTimer = this.respawnTime;
+    }
+    _regrow() {
+      this.state = 'alive'; this.wood = this.woodMax;
+      for (let r = this.topRow; r < this.surfRow; r++)
+        tiles[r * WORLD_W + this.col] = TILE.TREE_TRUNK;
+      for (const [lr,lc] of this.leafTiles)
+        if (tiles[lr * WORLD_W + lc] === TILE.SKY) tiles[lr * WORLD_W + lc] = TILE.TREE_LEAVES;
+    }
+    update(dt) {
+      if (this.state !== 'depleted') return;
+      this.respawnTimer -= dt;
+      if (this.respawnTimer <= 0) this._regrow();
+    }
+    // World-px Y of trunk base (for health bar placement)
+    get basePxY() { return (this.surfRow - 1) * TILE_SIZE; }
+  }
+
+  // ── World generation ──────────────────────────────────────────
   (function generate() {
     const surface=new Float32Array(WORLD_W); let sum=0;
-    for(let x=0;x<WORLD_W;x++) {
+    for(let x=0;x<WORLD_W;x++){
       const p=x/WORLD_W;
       const h=0.40*Math.sin(p*Math.PI*3.1+0.70)+0.22*Math.sin(p*Math.PI*7.3+1.40)
              +0.14*Math.sin(p*Math.PI*14.7+0.30)+0.07*Math.sin(p*Math.PI*27.1+2.00)
@@ -404,32 +479,39 @@ export function initSimulation(canvasId, sectionId) {
       surface[x]=52+((h+0.87)/1.74)*16; sum+=surface[x];
     }
     avgSurfaceRow=sum/WORLD_W;
-    for(let row=0;row<WORLD_H;row++) for(let col=0;col<WORLD_W;col++) {
+
+    for(let row=0;row<WORLD_H;row++) for(let col=0;col<WORLD_W;col++){
       const s=surface[col]; let t;
-      if(row<s) t=row>=WATER_ROW?TILE.WATER:TILE.SKY;
+      if(row<s)       t=row>=WATER_ROW?TILE.WATER:TILE.SKY;
       else if(row<s+1) t=s>=WATER_ROW?TILE.DIRT:TILE.GRASS;
       else if(row<s+5) t=TILE.DIRT;
-      else if(row<s+25) t=TILE.STONE;
-      else t=TILE.DEEP_STONE;
+      else if(row<s+25)t=TILE.STONE;
+      else             t=TILE.DEEP_STONE;
       tiles[row*WORLD_W+col]=t;
     }
+
     let rng=0xdeadbeef;
-    const rand=()=>{ rng=(Math.imul(rng,1664525)+1013904223)>>>0; return rng/0x100000000; };
+    const rand=()=>{rng=(Math.imul(rng,1664525)+1013904223)>>>0;return rng/0x100000000;};
+
     let nt=0;
-    for(let col=2;col<WORLD_W-2;col++) {
+    for(let col=2;col<WORLD_W-2;col++){
       if(col<nt) continue;
-      const sr=Math.floor(surface[col]);
+      const sr=Math.ceil(surface[col]);
       if(tiles[sr*WORLD_W+col]!==TILE.GRASS||rand()>0.45) continue;
       const th=3+~~(rand()*3),cw=1+~~(rand()*2),ch=1+~~(rand()*2),tt=sr-th;
       for(let r=sr-1;r>=tt;r--) if(r>=0) tiles[r*WORLD_W+col]=TILE.TREE_TRUNK;
-      for(let dr=-ch-1;dr<=1;dr++) for(let dc=-cw-1;dc<=cw+1;dc++) {
+      const leafTiles=[];
+      for(let dr=-ch-1;dr<=1;dr++) for(let dc=-cw-1;dc<=cw+1;dc++){
         const r=tt-1+dr,c=col+dc;
         if(r<0||r>=WORLD_H||c<0||c>=WORLD_W) continue;
         if((dr/(ch+0.5))**2+(dc/(cw+0.5))**2>1.0) continue;
-        if(tiles[r*WORLD_W+c]===TILE.SKY) tiles[r*WORLD_W+c]=TILE.TREE_LEAVES;
+        if(tiles[r*WORLD_W+c]===TILE.SKY){tiles[r*WORLD_W+c]=TILE.TREE_LEAVES;leafTiles.push([r,c]);}
       }
+      trees.push(new Tree(col, sr, tt, leafTiles, 5+~~(rand()*8)));
       nt=col+3+~~(rand()*4);
     }
+
+    // Ore veins
     const stoneTop=new Uint8Array(WORLD_W);
     for(let col=0;col<WORLD_W;col++) for(let row=0;row<WORLD_H;row++)
       if(tiles[row*WORLD_W+col]===TILE.STONE){stoneTop[col]=row;break;}
@@ -443,6 +525,7 @@ export function initSimulation(canvasId, sectionId) {
       }
     };
     pv(TILE.ORE_COAL,45,1,8,5); pv(TILE.ORE_IRON,30,6,18,7);
+
     for(let col=0;col<WORLD_W;col++){
       let found=false;
       for(let row=0;row<WORLD_H;row++){
@@ -455,28 +538,42 @@ export function initSimulation(canvasId, sectionId) {
     }
   })();
 
-  // ── Agents ────────────────────────────────────────────────────────
+  // ── Spawn agents ──────────────────────────────────────────────
   const agents=[];
   for(let i=0;i<6;i++){
     const col=Math.floor(15+(i/6)*(WORLD_W-30));
     agents.push(new Agent(i,col*TILE_SIZE+TILE_SIZE/2,surfaceYPx[col]));
   }
-  for(const a of agents) a.chooseGoal(surfaceYPx);
+  for(const a of agents) a.chooseGoal(surfaceYPx, trees);
 
-  // ── Tile helpers ──────────────────────────────────────────────────
-  function drawStdTile(px,py,pw,ph,idx){
+  // ── Tile helpers ──────────────────────────────────────────────
+  const drawStdTile=(px,py,pw,ph,idx)=>{
     const s=STYLE[idx],ht=Math.max(1,~~(ph/5));
     ctx.fillStyle=s[0];ctx.fillRect(px,py,pw,ph);
     ctx.fillStyle=s[1];ctx.fillRect(px,py,pw,ht);
     ctx.fillStyle=s[2];ctx.fillRect(px,py+ph-ht,pw,ht);
-  }
-  function drawOreTile(px,py,pw,ph,dots,dc){
+  };
+  const drawOreTile=(px,py,pw,ph,dots,dc)=>{
     drawStdTile(px,py,pw,ph,TILE.STONE);
     const ds=Math.max(2,~~(pw/5)); ctx.fillStyle=dc;
     for(const[fx,fy]of dots) ctx.fillRect(px+~~(fx*pw),py+~~(fy*ph),ds,ds);
+  };
+
+  // ── Tree health bars ──────────────────────────────────────────
+  function drawTreeHealth(tree) {
+    if (tree.state !== 'alive' || tree.wood === tree.woodMax) return;
+    const z=cam.zoom, ts=TILE_SIZE*z;
+    const sx=Math.round(tree.col*ts+ts/2-cam.x);
+    const sy=Math.round(tree.basePxY*z-cam.y);
+    const bw=Math.round(12*z), bh=Math.max(2,Math.round(2*z));
+    const bx=sx-bw/2;
+    const pct=tree.wood/tree.woodMax;
+    ctx.fillStyle='#1a2a30'; ctx.fillRect(bx,sy,bw,bh);
+    ctx.fillStyle=pct<0.33?'#e83030':pct<0.66?'#e09020':'#48c840';
+    ctx.fillRect(bx,sy,Math.round(pct*bw),bh);
   }
 
-  // ── Render ────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────
   let simTime=0;
   function render(dt){
     simTime+=dt;
@@ -502,18 +599,18 @@ export function initSimulation(canvasId, sectionId) {
       if(ts>=14){ctx.strokeStyle='rgba(0,0,0,0.1)';ctx.lineWidth=0.5;ctx.strokeRect(px+.5,py+.5,pw-2,ph-2);}
     }
 
+    for(const t of trees) drawTreeHealth(t);
     drawPaths(ctx,agents,surfaceYPx,cam);
     for(const a of agents) drawAgent(ctx,a,cam);
     drawNeedsPanel(ctx,agents,W,H);
 
-    // HUD bar
     ctx.fillStyle='rgba(6,12,20,0.82)'; ctx.fillRect(0,0,W,34);
     ctx.fillStyle='#c98a63'; ctx.font='bold 12px monospace'; ctx.fillText('AI LIFE SIMULATION',12,14);
     ctx.fillStyle='#4a6878'; ctx.font='10px monospace';
-    ctx.fillText(`obj 6 — needs: hunger/energy/sleep  ·  drag/arrows  ·  scroll zoom  ·  ${cam.zoom.toFixed(1)}×`,12,28);
+    ctx.fillText(`obj 7 — wood harvesting  ·  drag/arrows  ·  scroll zoom  ·  ${cam.zoom.toFixed(1)}×`,12,28);
   }
 
-  // ── Input ──────────────────────────────────────────────────────────
+  // ── Input ──────────────────────────────────────────────────────
   let drag=null; const keys=new Set();
   canvas.addEventListener('mousedown',e=>{drag={mx:e.clientX,my:e.clientY,cx:cam.x,cy:cam.y};canvas.style.cursor='grabbing';});
   window.addEventListener('mousemove',e=>{if(!drag)return;cam.x=drag.cx-(e.clientX-drag.mx);cam.y=drag.cy-(e.clientY-drag.my);clampCam();});
@@ -522,7 +619,7 @@ export function initSimulation(canvasId, sectionId) {
     e.preventDefault();
     const rect=canvas.getBoundingClientRect(),mx=e.clientX-rect.left,my=e.clientY-rect.top,prev=cam.zoom;
     cam.zoom=Math.min(cam.maxZoom,Math.max(cam.minZoom,cam.zoom*(e.deltaY<0?1.15:1/1.15)));
-    cam.x=mx-(mx-cam.x)*cam.zoom/prev; cam.y=my-(my-cam.y)*cam.zoom/prev; clampCam();
+    cam.x=mx-(mx-cam.x)*cam.zoom/prev;cam.y=my-(my-cam.y)*cam.zoom/prev;clampCam();
   },{passive:false});
   window.addEventListener('keydown',e=>keys.add(e.key));
   window.addEventListener('keyup',e=>keys.delete(e.key));
@@ -540,7 +637,7 @@ export function initSimulation(canvasId, sectionId) {
     cam.y=Math.max(0,Math.min(Math.max(0,WORLD_H*ts-canvas.height),cam.y));
   }
 
-  // ── Resize ────────────────────────────────────────────────────────
+  // ── Resize ────────────────────────────────────────────────────
   function resize(){canvas.width=section.clientWidth;canvas.height=section.clientHeight;clampCam();}
   new ResizeObserver(resize).observe(section); resize();
   const ts0=TILE_SIZE*cam.zoom;
@@ -548,12 +645,13 @@ export function initSimulation(canvasId, sectionId) {
   cam.y=Math.max(0,avgSurfaceRow*ts0-canvas.height*0.55);
   clampCam(); canvas.style.cursor='grab';
 
-  // ── Loop ──────────────────────────────────────────────────────────
+  // ── Loop ──────────────────────────────────────────────────────
   let last=performance.now();
   function loop(now){
     const dt=Math.min(0.05,(now-last)/1000); last=now;
     handleKeys(dt);
-    for(const a of agents) a.update(dt,surfaceYPx);
+    for(const t of trees)  t.update(dt);
+    for(const a of agents) a.update(dt,surfaceYPx,trees);
     render(dt);
     requestAnimationFrame(loop);
   }
