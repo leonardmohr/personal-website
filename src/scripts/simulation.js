@@ -1,5 +1,5 @@
 // simulation.js
-// Objective 8: Stone & ore mining — agents craft pickaxes from wood and mine exposed rock outcrops
+// Objective 9: Clay production — agents dig dirt from shoreline mud patches, craft clay near water
 
 const TILE_SIZE = 16;
 const WORLD_W   = 200;
@@ -87,7 +87,7 @@ class Agent {
     this.y           = worldY;
     this.vx          = 0;
     this.facingRight = true;
-    this.state       = 'idle';   // idle | walk | sleep | harvest | mine
+    this.state       = 'idle';   // idle | walk | sleep | harvest | mine | dig | craft
     this.stateTimer  = Math.random() * 2;
     this.animTime    = Math.random() * 20;
     this.colors      = AGENT_COLORS[id % AGENT_COLORS.length];
@@ -99,17 +99,18 @@ class Agent {
     this.sleep  = 50 + Math.random() * 45;
 
     // Inventory
-    this.inventory  = { wood: 0, stone: 0, coal: 0 };
+    this.inventory  = { wood: 0, stone: 0, coal: 0, dirt: 0, clay: 0 };
     this.hasPickaxe = false;
 
     // Pathfinding / task
     this.path        = [];
     this.pathIdx     = 0;
     this.goalCol     = -1;
-    this.nextAction  = null;    // 'harvest' | 'mine' | null — action on arrival
+    this.nextAction  = null;    // 'harvest' | 'mine' | 'dig' | 'craft' | null
     this.targetTree  = null;
     this.targetOre   = null;
-    this.harvestTimer = 0;      // counts up toward harvestTime (shared for harvest & mine)
+    this.targetPatch = null;
+    this.harvestTimer = 0;
   }
 
   get speed() {
@@ -120,31 +121,31 @@ class Agent {
   get maxEnergy() { return Math.max(30, this.sleep); }
 
   // ── Goal selection ─────────────────────────────────────────────
-  chooseGoal(surfaceYPx, trees, oreNodes) {
+  chooseGoal(surfaceYPx, trees, oreNodes, mudPatches, waterEdgeCols) {
     // Auto-craft pickaxe when idle and have enough wood
     if (!this.hasPickaxe && this.inventory.wood >= MATERIAL.PICKAXE.recipe.wood) {
       this.inventory.wood -= MATERIAL.PICKAXE.recipe.wood;
       this.hasPickaxe = true;
     }
 
-    const canCarryWood  = this.inventory.wood  < MATERIAL.WOOD.carryLimit;
-    const canCarryStone = this.inventory.stone < MATERIAL.STONE.carryLimit;
-    const canCarryCoal  = this.inventory.coal  < MATERIAL.COAL.carryLimit;
-    const canMine = this.hasPickaxe && (canCarryStone || canCarryCoal);
+    const canCarryClay = this.inventory.clay  < MATERIAL.CLAY.carryLimit;
+    const canCraft     = canCarryClay && this.inventory.dirt >= 2 && waterEdgeCols.length > 0;
+    const canDig       = canCarryClay && this.inventory.dirt < 6 && mudPatches.some(p=>p.state==='alive');
+    const canHarvest   = this.inventory.wood  < MATERIAL.WOOD.carryLimit;
+    const canMine      = this.hasPickaxe && (this.inventory.stone < MATERIAL.STONE.carryLimit || this.inventory.coal < MATERIAL.COAL.carryLimit);
 
-    const roll = Math.random();
-    if (canCarryWood && canMine) {
-      roll < 0.42 ? this._chooseHarvestGoal(surfaceYPx, trees)
-                  : this._chooseMineGoal(surfaceYPx, oreNodes);
-    } else if (canCarryWood) {
-      roll < 0.62 ? this._chooseHarvestGoal(surfaceYPx, trees)
-                  : this._chooseWalkGoal(surfaceYPx);
-    } else if (canMine) {
-      roll < 0.70 ? this._chooseMineGoal(surfaceYPx, oreNodes)
-                  : this._chooseWalkGoal(surfaceYPx);
-    } else {
-      this._chooseWalkGoal(surfaceYPx);
-    }
+    // Weighted random choice among available actions
+    const opts = [];
+    if (canCraft)   opts.push({w:30, fn:()=>this._chooseCraftGoal(surfaceYPx, waterEdgeCols)});
+    if (canDig)     opts.push({w:20, fn:()=>this._chooseDigGoal(surfaceYPx, mudPatches)});
+    if (canHarvest) opts.push({w:25, fn:()=>this._chooseHarvestGoal(surfaceYPx, trees)});
+    if (canMine)    opts.push({w:20, fn:()=>this._chooseMineGoal(surfaceYPx, oreNodes)});
+    opts.push({w:10, fn:()=>this._chooseWalkGoal(surfaceYPx)});
+
+    const total = opts.reduce((s,o)=>s+o.w, 0);
+    let r = Math.random() * total;
+    for (const o of opts) { r -= o.w; if (r <= 0) { o.fn(); return; } }
+    this._chooseWalkGoal(surfaceYPx);
   }
 
   _chooseWalkGoal(surfaceYPx) {
@@ -172,7 +173,6 @@ class Agent {
       if (d < bestDist) { best=t; bestDist=d; }
     }
     if (!best) { this._chooseWalkGoal(surfaceYPx); return; }
-
     const path = aStar(curCol, best.col, surfaceYPx);
     if (path && path.length > 0) {
       this.path=path; this.pathIdx=Math.min(1,path.length-1);
@@ -192,12 +192,46 @@ class Agent {
       if (d < bestDist) { best=n; bestDist=d; }
     }
     if (!best) { this._chooseWalkGoal(surfaceYPx); return; }
-
     const path = aStar(curCol, best.col, surfaceYPx);
     if (path && path.length > 0) {
       this.path=path; this.pathIdx=Math.min(1,path.length-1);
       this.goalCol=best.col; this.targetOre=best;
       this.nextAction='mine'; this.state='walk';
+    } else {
+      this._chooseWalkGoal(surfaceYPx);
+    }
+  }
+
+  _chooseDigGoal(surfaceYPx, mudPatches) {
+    const curCol = Math.max(0, Math.min(WORLD_W-1, Math.floor(this.x / TILE_SIZE)));
+    let best=null, bestDist=Infinity;
+    for (const p of mudPatches) {
+      if (p.state !== 'alive') continue;
+      const d = Math.abs(p.col - curCol);
+      if (d < bestDist) { best=p; bestDist=d; }
+    }
+    if (!best) { this._chooseWalkGoal(surfaceYPx); return; }
+    const path = aStar(curCol, best.col, surfaceYPx);
+    if (path && path.length > 0) {
+      this.path=path; this.pathIdx=Math.min(1,path.length-1);
+      this.goalCol=best.col; this.targetPatch=best;
+      this.nextAction='dig'; this.state='walk';
+    } else {
+      this._chooseWalkGoal(surfaceYPx);
+    }
+  }
+
+  _chooseCraftGoal(surfaceYPx, waterEdgeCols) {
+    const curCol = Math.max(0, Math.min(WORLD_W-1, Math.floor(this.x / TILE_SIZE)));
+    let best=waterEdgeCols[0], bestDist=Math.abs(waterEdgeCols[0]-curCol);
+    for (const col of waterEdgeCols) {
+      const d = Math.abs(col - curCol);
+      if (d < bestDist) { best=col; bestDist=d; }
+    }
+    const path = aStar(curCol, best, surfaceYPx);
+    if (path && path.length > 0) {
+      this.path=path; this.pathIdx=Math.min(1,path.length-1);
+      this.goalCol=best; this.nextAction='craft'; this.state='walk';
     } else {
       this._chooseWalkGoal(surfaceYPx);
     }
@@ -211,22 +245,21 @@ class Agent {
       this.energy = Math.min(this.maxEnergy, this.energy + NEEDS.ENERGY_RECOVER * dt);
       this.sleep  = Math.min(100, this.sleep + NEEDS.SLEEP_RECOVER * dt);
     } else {
-      const drain = this.state==='walk'||this.state==='harvest'||this.state==='mine'
-        ? NEEDS.ENERGY_DRAIN_WALK : NEEDS.ENERGY_DRAIN_IDLE;
-      this.energy = Math.max(0, this.energy - drain * mult * dt);
+      const active = this.state==='walk'||this.state==='harvest'||this.state==='mine'||this.state==='dig';
+      this.energy = Math.max(0, this.energy - (active ? NEEDS.ENERGY_DRAIN_WALK : NEEDS.ENERGY_DRAIN_IDLE) * mult * dt);
       this.sleep  = Math.max(0, this.sleep - NEEDS.SLEEP_DRAIN * dt);
     }
   }
 
   // ── Main update ────────────────────────────────────────────────
-  update(dt, surfaceYPx, trees, oreNodes) {
+  update(dt, surfaceYPx, trees, oreNodes, mudPatches, waterEdgeCols) {
     this.animTime += dt;
     this.updateNeeds(dt);
 
     // Sleep override
     if (this.state !== 'sleep' && this.energy < NEEDS.SLEEP_TRIGGER) {
       this.state='sleep'; this.path=[]; this.goalCol=-1; this.vx=0;
-      this.targetTree=null; this.targetOre=null; return;
+      this.targetTree=null; this.targetOre=null; this.targetPatch=null; return;
     }
     if (this.state === 'sleep') {
       if (this.energy >= NEEDS.SLEEP_RELEASE) { this.state='idle'; this.stateTimer=0.5+Math.random(); }
@@ -268,17 +301,47 @@ class Agent {
       return;
     }
 
+    // ── Dig state ──────────────────────────────────────────────
+    if (this.state === 'dig') {
+      this.vx = 0;
+      if (!this.targetPatch || this.targetPatch.state !== 'alive' || this.inventory.dirt >= 6) {
+        this.targetPatch=null; this.state='idle'; this.stateTimer=0.5+Math.random()*1.5;
+        return;
+      }
+      this.harvestTimer += dt;
+      if (this.harvestTimer >= 3.0) {
+        this.harvestTimer = 0;
+        this.inventory.dirt += this.targetPatch.dig();
+      }
+      return;
+    }
+
+    // ── Craft state ────────────────────────────────────────────
+    if (this.state === 'craft') {
+      this.vx = 0;
+      if (this.inventory.dirt < 2 || this.inventory.clay >= MATERIAL.CLAY.carryLimit) {
+        this.state='idle'; this.stateTimer=0.5+Math.random();
+        return;
+      }
+      this.harvestTimer += dt;
+      if (this.harvestTimer >= MATERIAL.CLAY.recipe.processTime) {
+        this.harvestTimer = 0;
+        this.inventory.dirt -= 2;
+        this.inventory.clay = Math.min(MATERIAL.CLAY.carryLimit, this.inventory.clay + 1);
+      }
+      return;
+    }
+
     // ── Idle ───────────────────────────────────────────────────
     if (this.state === 'idle') {
       this.vx = 0;
       this.stateTimer -= dt;
-      if (this.stateTimer <= 0) this.chooseGoal(surfaceYPx, trees, oreNodes);
+      if (this.stateTimer <= 0) this.chooseGoal(surfaceYPx, trees, oreNodes, mudPatches, waterEdgeCols);
       return;
     }
 
     // ── Walk ───────────────────────────────────────────────────
     if (this.pathIdx >= this.path.length) {
-      // Arrived — dispatch next action
       if (this.nextAction === 'harvest' && this.targetTree?.state === 'alive') {
         this.state='harvest'; this.harvestTimer=0;
         this.facingRight = (this.targetTree.col * TILE_SIZE) >= this.x;
@@ -287,9 +350,16 @@ class Agent {
         this.state='mine'; this.harvestTimer=0;
         this.facingRight = (this.targetOre.col * TILE_SIZE) >= this.x;
         this.nextAction=null;
+      } else if (this.nextAction === 'dig' && this.targetPatch?.state === 'alive') {
+        this.state='dig'; this.harvestTimer=0;
+        this.facingRight = (this.targetPatch.col * TILE_SIZE) >= this.x;
+        this.nextAction=null;
+      } else if (this.nextAction === 'craft') {
+        this.state='craft'; this.harvestTimer=0;
+        this.nextAction=null;
       } else {
         this.path=[]; this.goalCol=-1; this.nextAction=null;
-        this.targetTree=null; this.targetOre=null;
+        this.targetTree=null; this.targetOre=null; this.targetPatch=null;
         this.state='idle'; this.stateTimer=1+Math.random()*3; this.vx=0;
       }
       return;
@@ -321,7 +391,6 @@ function drawAgent(ctx, agent, cam) {
     ctx.fillRect(Math.round(sx+lx*z),Math.round(sy+ly*z),Math.max(1,Math.round(w*z)),Math.max(1,Math.round(h*z)));
   };
 
-  // Shadow
   ctx.save(); ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.beginPath();
   ctx.ellipse(sx,sy,Math.round(6*z),Math.round(2*z),0,0,Math.PI*2); ctx.fill(); ctx.restore();
 
@@ -338,23 +407,24 @@ function drawAgent(ctx, agent, cam) {
       ctx.restore();
     }
 
-  } else if (agent.state === 'harvest' || agent.state === 'mine') {
-    // Chopping/mining pose: body upright, front arm raised and swinging
-    const isMine  = agent.state === 'mine';
+  } else if (agent.state === 'harvest' || agent.state === 'mine' || agent.state === 'dig') {
+    const isMine = agent.state === 'mine';
+    const isDig  = agent.state === 'dig';
     const matTime = isMine
       ? (agent.targetOre?.tileType === TILE.ORE_COAL ? MATERIAL.COAL.harvestTime : MATERIAL.STONE.harvestTime)
+      : isDig ? 3.0
       : MATERIAL.WOOD.harvestTime;
-    const prog   = agent.harvestTimer / matTime;
-    const chopY  = -Math.abs(Math.sin(prog * Math.PI)) * 6;
-    const flip   = agent.facingRight ? 1 : -1;
+    const prog  = agent.harvestTimer / matTime;
+    const chopY = -Math.abs(Math.sin(prog * Math.PI)) * 6;
+    const flip  = agent.facingRight ? 1 : -1;
 
     r(-1,-9,3,9,c.pants); r(-1,-1,3,1,c.shoe);
     r(-4,-15,8,6,c.shirt);
     r(-6,-14,2,5,c.skin);
     r(flip>0?4:-6,-14+chopY,2,5,c.skin);
-    // Tool head — wood-axe (brown) for harvest, pickaxe (steel) for mine
     if (z>=1.5) {
-      ctx.fillStyle = isMine ? '#c0c0c8' : '#a0a0a8';
+      // axe=grey, pickaxe=silver, shovel=brown
+      ctx.fillStyle = isMine ? '#c0c0c8' : isDig ? '#9a7040' : '#a0a0a8';
       ctx.fillRect(Math.round(sx+(flip>0?6:-8)*z),Math.round(sy+(-14+chopY-2)*z),Math.max(1,Math.round(3*z)),Math.max(1,Math.round(4*z)));
     }
     r(-4,-9,3,9,c.pants); r(-4,-1,3,1,c.shoe);
@@ -362,12 +432,34 @@ function drawAgent(ctx, agent, cam) {
     if (agent.facingRight) {r(1,-19,1,1,'#080808');r(3,-19,1,1,'#080808');}
     else                   {r(-4,-19,1,1,'#080808');r(-2,-19,1,1,'#080808');}
 
-    // Progress bar
     if (z>=1.4) {
       const bw=Math.round(18*z), bh=Math.max(2,Math.round(2*z));
       const bx=sx-Math.round(9*z);
       ctx.fillStyle='#1a2a30'; ctx.fillRect(bx,sy+Math.round(2*z),bw,bh);
-      ctx.fillStyle=isMine?'#727272':'#8b5a2b';
+      ctx.fillStyle=isMine?'#727272':isDig?'#7a5228':'#8b5a2b';
+      ctx.fillRect(bx,sy+Math.round(2*z),Math.round(prog*bw),bh);
+    }
+
+  } else if (agent.state === 'craft') {
+    // Kneeling/mixing pose — arms out front, bobbing
+    const prog  = agent.harvestTimer / MATERIAL.CLAY.recipe.processTime;
+    const mixY  = Math.sin(agent.animTime * 6) * 2;   // arms oscillate
+    r(-3,-8,6,8,c.pants); r(-3,-1,6,1,c.shoe);         // legs (crouched, shorter)
+    r(-4,-14,8,6,c.shirt);                              // torso
+    r(-6,-13+mixY,2,5,c.skin); r(4,-13-mixY,2,5,c.skin); // both arms mixing
+    r(-3,-20,6,6,c.skin); r(-3,-20,6,2,c.hair);
+    if (agent.facingRight){r(1,-17,1,1,'#080808');r(3,-17,1,1,'#080808');}
+    else                  {r(-4,-17,1,1,'#080808');r(-2,-17,1,1,'#080808');}
+    // Clay bowl hint
+    if (z>=1.5) {
+      ctx.fillStyle='#b5734a';
+      ctx.fillRect(Math.round(sx-Math.round(3*z)),Math.round(sy-Math.round(3*z)),Math.max(2,Math.round(6*z)),Math.max(1,Math.round(2*z)));
+    }
+    if (z>=1.4) {
+      const bw=Math.round(18*z), bh=Math.max(2,Math.round(2*z));
+      const bx=sx-Math.round(9*z);
+      ctx.fillStyle='#1a2a30'; ctx.fillRect(bx,sy+Math.round(2*z),bw,bh);
+      ctx.fillStyle='#b5734a';
       ctx.fillRect(bx,sy+Math.round(2*z),Math.round(prog*bw),bh);
     }
 
@@ -441,10 +533,10 @@ function drawPaths(ctx, agents, surfaceYPx, cam) {
 
 // ── Needs + inventory panel ────────────────────────────────────────────────────
 function drawNeedsPanel(ctx, agents, W, H) {
-  const ROW=13,PAD=7,PW=390;
-  const heads=['AGT','STATE','HGR','NRG','SLP','WD','STN','COAL','⛏'];
+  const ROW=13,PAD=7,PW=440;
+  const heads=['AGT','STATE','HGR','NRG','SLP','WD','STN','COAL','DRT','CLY','⛏'];
   const PH=(agents.length+2)*ROW+PAD*2, px=W-PW-10, py=H-PH-10;
-  const cx=[px+PAD,px+46,px+96,px+142,px+190,px+236,px+270,px+302,px+346];
+  const cx=[px+PAD,px+46,px+96,px+138,px+180,px+222,px+254,px+284,px+314,px+344,px+374];
 
   ctx.fillStyle='rgba(6,12,20,0.88)'; ctx.fillRect(px,py,PW,PH);
   ctx.strokeStyle='#2a4050'; ctx.lineWidth=1; ctx.strokeRect(px+.5,py+.5,PW-1,PH-1);
@@ -453,7 +545,7 @@ function drawNeedsPanel(ctx, agents, W, H) {
   ctx.fillStyle='#2a4050'; ctx.fillRect(px+PAD,py+PAD+ROW+1,PW-PAD*2,1);
 
   const drawBar=(x,y,val,max,col)=>{
-    const bw=36,bh=6,pct=Math.max(0,Math.min(1,val/max));
+    const bw=32,bh=6,pct=Math.max(0,Math.min(1,val/max));
     const fc=pct<0.25?'#e83030':pct<0.5?'#e09020':col;
     ctx.fillStyle='#1a2a30'; ctx.fillRect(x,y-8,bw,bh);
     ctx.fillStyle=fc;        ctx.fillRect(x,y-8,Math.round(pct*bw),bh);
@@ -468,21 +560,18 @@ function drawNeedsPanel(ctx, agents, W, H) {
     ctx.fillStyle=a.colors.shirt; ctx.fillRect(cx[0],ry-8,7,7);
     ctx.fillStyle='#9ab0bc'; ctx.fillText(`A${a.id+1}`,cx[0]+9,ry);
     ctx.font='9px monospace';
-    ctx.fillStyle={idle:'#8aaa70',walk:'#70aacc',sleep:'#8888ee',harvest:'#c8a040',mine:'#a0a0c8'}[a.state]||'#888';
+    ctx.fillStyle={idle:'#8aaa70',walk:'#70aacc',sleep:'#8888ee',harvest:'#c8a040',mine:'#a0a0c8',dig:'#c8a060',craft:'#e08840'}[a.state]||'#888';
     ctx.fillText(a.state,cx[1],ry);
     drawBar(cx[2],ry,a.hunger,100,'#48c840');
     drawBar(cx[3],ry,a.energy,a.maxEnergy,'#e8c030');
     drawBar(cx[4],ry,a.sleep,100,'#4898e8');
-    // Inventory
     ctx.font='bold 9px monospace';
-    ctx.fillStyle=a.inventory.wood>0?'#c8a060':'#4a6878';
-    ctx.fillText(`🪵${a.inventory.wood}`,cx[5],ry);
-    ctx.fillStyle=a.inventory.stone>0?'#909090':'#4a6878';
-    ctx.fillText(a.inventory.stone,cx[6],ry);
-    ctx.fillStyle=a.inventory.coal>0?'#6868a0':'#4a6878';
-    ctx.fillText(a.inventory.coal,cx[7],ry);
-    ctx.fillStyle=a.hasPickaxe?'#d0d0e8':'#4a6878';
-    ctx.fillText(a.hasPickaxe?'Y':'–',cx[8],ry);
+    ctx.fillStyle=a.inventory.wood >0?'#c8a060':'#4a6878'; ctx.fillText(`🪵${a.inventory.wood}`, cx[5],ry);
+    ctx.fillStyle=a.inventory.stone>0?'#909090':'#4a6878'; ctx.fillText(a.inventory.stone,         cx[6],ry);
+    ctx.fillStyle=a.inventory.coal >0?'#6868a0':'#4a6878'; ctx.fillText(a.inventory.coal,          cx[7],ry);
+    ctx.fillStyle=a.inventory.dirt >0?'#9a7040':'#4a6878'; ctx.fillText(a.inventory.dirt,          cx[8],ry);
+    ctx.fillStyle=a.inventory.clay >0?'#c87840':'#4a6878'; ctx.fillText(a.inventory.clay,          cx[9],ry);
+    ctx.fillStyle=a.hasPickaxe?'#d0d0e8':'#4a6878';        ctx.fillText(a.hasPickaxe?'Y':'–',      cx[10],ry);
   }
 }
 
@@ -494,90 +583,80 @@ export function initSimulation(canvasId, sectionId) {
   const ctx=canvas.getContext('2d'); ctx.imageSmoothingEnabled=false;
   const cam={x:0,y:0,zoom:2,minZoom:0.5,maxZoom:6};
 
-  const tiles      = new Uint8Array(WORLD_W * WORLD_H);
-  const surfaceYPx = new Uint16Array(WORLD_W);
-  const trees      = [];  // Tree instances (defined below, created in generate)
-  const oreNodes   = [];  // OreNode instances (defined below, created in generate)
-  let avgSurfaceRow = 60;
+  const tiles        = new Uint8Array(WORLD_W * WORLD_H);
+  const surfaceYPx   = new Uint16Array(WORLD_W);
+  const trees        = [];
+  const oreNodes     = [];
+  const mudPatches   = [];
+  const waterEdgeCols= [];
+  let avgSurfaceRow  = 60;
 
-  // ── Tree class (closes over tiles) ────────────────────────────
+  // ── Tree class ────────────────────────────────────────────────
   class Tree {
     constructor(col, surfRow, topRow, leafTiles, woodAmt) {
-      this.col       = col;
-      this.surfRow   = surfRow;   // grass tile row (never overwritten)
-      this.topRow    = topRow;    // topmost trunk tile row
-      this.leafTiles = leafTiles; // [[row, col], ...]
-      this.woodMax   = woodAmt;
-      this.wood      = woodAmt;
-      this.state     = 'alive';   // 'alive' | 'depleted'
-      this.respawnTimer = 0;
-      this.respawnTime  = 35 + Math.random() * 25;
+      this.col=col; this.surfRow=surfRow; this.topRow=topRow; this.leafTiles=leafTiles;
+      this.woodMax=woodAmt; this.wood=woodAmt; this.state='alive';
+      this.respawnTimer=0; this.respawnTime=35+Math.random()*25;
     }
     harvest() {
-      if (this.wood <= 0 || this.state !== 'alive') return 0;
+      if(this.wood<=0||this.state!=='alive') return 0;
       this.wood--;
-      if (this.wood === 0) this._deplete();
+      if(this.wood===0) this._deplete();
       return 1;
     }
     _deplete() {
-      this.state = 'depleted';
-      for (let r = this.topRow; r < this.surfRow; r++)
-        tiles[r * WORLD_W + this.col] = TILE.SKY;
-      for (const [lr,lc] of this.leafTiles)
-        if (tiles[lr * WORLD_W + lc] === TILE.TREE_LEAVES) tiles[lr * WORLD_W + lc] = TILE.SKY;
-      this.respawnTimer = this.respawnTime;
+      this.state='depleted';
+      for(let r=this.topRow;r<this.surfRow;r++) tiles[r*WORLD_W+this.col]=TILE.SKY;
+      for(const[lr,lc]of this.leafTiles) if(tiles[lr*WORLD_W+lc]===TILE.TREE_LEAVES) tiles[lr*WORLD_W+lc]=TILE.SKY;
+      this.respawnTimer=this.respawnTime;
     }
     _regrow() {
-      this.state = 'alive'; this.wood = this.woodMax;
-      for (let r = this.topRow; r < this.surfRow; r++)
-        tiles[r * WORLD_W + this.col] = TILE.TREE_TRUNK;
-      for (const [lr,lc] of this.leafTiles)
-        if (tiles[lr * WORLD_W + lc] === TILE.SKY) tiles[lr * WORLD_W + lc] = TILE.TREE_LEAVES;
+      this.state='alive'; this.wood=this.woodMax;
+      for(let r=this.topRow;r<this.surfRow;r++) tiles[r*WORLD_W+this.col]=TILE.TREE_TRUNK;
+      for(const[lr,lc]of this.leafTiles) if(tiles[lr*WORLD_W+lc]===TILE.SKY) tiles[lr*WORLD_W+lc]=TILE.TREE_LEAVES;
     }
-    update(dt) {
-      if (this.state !== 'depleted') return;
-      this.respawnTimer -= dt;
-      if (this.respawnTimer <= 0) this._regrow();
-    }
-    // World-px Y of trunk base (for health bar placement)
-    get basePxY() { return (this.surfRow - 1) * TILE_SIZE; }
+    update(dt) { if(this.state!=='depleted') return; this.respawnTimer-=dt; if(this.respawnTimer<=0) this._regrow(); }
+    get basePxY() { return (this.surfRow-1)*TILE_SIZE; }
   }
 
-  // ── OreNode class (closes over tiles) ─────────────────────────
+  // ── OreNode class ─────────────────────────────────────────────
   class OreNode {
     constructor(col, surfRow, tileType) {
-      this.col       = col;
-      this.surfRow   = surfRow;   // row index of the surface tile (STONE or ORE_COAL)
-      this.tileType  = tileType;  // TILE.STONE or TILE.ORE_COAL
-      this.amountMax = tileType === TILE.ORE_COAL ? 8 + ~~(Math.random()*8) : 6 + ~~(Math.random()*6);
-      this.amount    = this.amountMax;
-      this.state     = 'alive';   // 'alive' | 'depleted'
-      this.respawnTimer = 0;
-      this.respawnTime  = 20 + Math.random() * 15;
+      this.col=col; this.surfRow=surfRow; this.tileType=tileType;
+      this.amountMax=tileType===TILE.ORE_COAL?8+~~(Math.random()*8):6+~~(Math.random()*6);
+      this.amount=this.amountMax; this.state='alive';
+      this.respawnTimer=0; this.respawnTime=20+Math.random()*15;
     }
     mine() {
-      if (this.amount <= 0 || this.state !== 'alive') return null;
+      if(this.amount<=0||this.state!=='alive') return null;
       this.amount--;
-      const type = this.tileType === TILE.ORE_COAL ? 'coal' : 'stone';
-      if (this.amount === 0) this._deplete();
-      return { type, qty: 1 };
+      const type=this.tileType===TILE.ORE_COAL?'coal':'stone';
+      if(this.amount===0) this._deplete();
+      return{type,qty:1};
     }
-    _deplete() {
-      this.state = 'depleted';
-      tiles[this.surfRow * WORLD_W + this.col] = TILE.DIRT;
-      this.respawnTimer = this.respawnTime;
+    _deplete() { this.state='depleted'; tiles[this.surfRow*WORLD_W+this.col]=TILE.DIRT; this.respawnTimer=this.respawnTime; }
+    _regrow()  { this.state='alive'; this.amount=this.amountMax; tiles[this.surfRow*WORLD_W+this.col]=this.tileType; }
+    update(dt) { if(this.state!=='depleted') return; this.respawnTimer-=dt; if(this.respawnTimer<=0) this._regrow(); }
+    get basePxY() { return this.surfRow*TILE_SIZE; }
+  }
+
+  // ── MudPatch class ────────────────────────────────────────────
+  class MudPatch {
+    constructor(col, surfRow) {
+      this.col=col; this.surfRow=surfRow;
+      this.amountMax=6+~~(Math.random()*6); this.amount=this.amountMax;
+      this.state='alive'; this.respawnTimer=0; this.respawnTime=15+Math.random()*10;
     }
-    _regrow() {
-      this.state = 'alive'; this.amount = this.amountMax;
-      tiles[this.surfRow * WORLD_W + this.col] = this.tileType;
+    dig() {
+      if(this.amount<=0||this.state!=='alive') return 0;
+      this.amount--;
+      if(this.amount===0) this._deplete();
+      return 1;
     }
-    update(dt) {
-      if (this.state !== 'depleted') return;
-      this.respawnTimer -= dt;
-      if (this.respawnTimer <= 0) this._regrow();
-    }
-    // World-px Y of ore tile top edge (for health bar placement)
-    get basePxY() { return this.surfRow * TILE_SIZE; }
+    _deplete() { this.state='depleted'; this.respawnTimer=this.respawnTime; }
+    _regrow()  { this.state='alive'; this.amount=this.amountMax; }
+    update(dt) { if(this.state!=='depleted') return; this.respawnTimer-=dt; if(this.respawnTimer<=0) this._regrow(); }
+    get basePxY() { return this.surfRow*TILE_SIZE; }
   }
 
   // ── World generation ──────────────────────────────────────────
@@ -619,11 +698,10 @@ export function initSimulation(canvasId, sectionId) {
         if((dr/(ch+0.5))**2+(dc/(cw+0.5))**2>1.0) continue;
         if(tiles[r*WORLD_W+c]===TILE.SKY){tiles[r*WORLD_W+c]=TILE.TREE_LEAVES;leafTiles.push([r,c]);}
       }
-      trees.push(new Tree(col, sr, tt, leafTiles, 5+~~(rand()*8)));
+      trees.push(new Tree(col,sr,tt,leafTiles,5+~~(rand()*8)));
       nt=col+3+~~(rand()*4);
     }
 
-    // Ore veins
     const stoneTop=new Uint8Array(WORLD_W);
     for(let col=0;col<WORLD_W;col++) for(let row=0;row<WORLD_H;row++)
       if(tiles[row*WORLD_W+col]===TILE.STONE){stoneTop[col]=row;break;}
@@ -638,21 +716,17 @@ export function initSimulation(canvasId, sectionId) {
     };
     pv(TILE.ORE_COAL,45,1,8,5); pv(TILE.ORE_IRON,30,6,18,7);
 
-    // Rocky outcrops — surface-exposed stone/coal patches for mining
-    const numOutcrops = 25 + ~~(rand() * 6);
-    for (let i = 0; i < numOutcrops; i++) {
-      const startCol = 3 + ~~(rand() * (WORLD_W - 6));
-      const width    = 1 + ~~(rand() * 4);
-      const isCoal   = rand() < 0.35;
-      for (let dc = 0; dc < width; dc++) {
-        const col = startCol + dc;
-        if (col < 0 || col >= WORLD_W) continue;
-        const sr = Math.ceil(surface[col]);
-        if (sr < 0 || sr >= WORLD_H) continue;
-        const cur = tiles[sr * WORLD_W + col];
-        if (cur === TILE.GRASS || cur === TILE.DIRT) {
-          tiles[sr * WORLD_W + col] = isCoal ? TILE.ORE_COAL : TILE.STONE;
-        }
+    // Rocky outcrops
+    const numOutcrops=25+~~(rand()*6);
+    for(let i=0;i<numOutcrops;i++){
+      const startCol=3+~~(rand()*(WORLD_W-6)), width=1+~~(rand()*4), isCoal=rand()<0.35;
+      for(let dc=0;dc<width;dc++){
+        const col=startCol+dc;
+        if(col<0||col>=WORLD_W) continue;
+        const sr=Math.ceil(surface[col]);
+        if(sr<0||sr>=WORLD_H) continue;
+        const cur=tiles[sr*WORLD_W+col];
+        if(cur===TILE.GRASS||cur===TILE.DIRT) tiles[sr*WORLD_W+col]=isCoal?TILE.ORE_COAL:TILE.STONE;
       }
     }
 
@@ -667,14 +741,36 @@ export function initSimulation(canvasId, sectionId) {
       if(!found) surfaceYPx[col]=(WORLD_H-1)*TILE_SIZE;
     }
 
-    // Populate oreNodes from surface STONE / ORE_COAL outcrops
-    for (let col = 0; col < WORLD_W; col++) {
-      const sr = Math.ceil(surface[col]);
-      if (sr < 0 || sr >= WORLD_H) continue;
-      const t = tiles[sr * WORLD_W + col];
-      if (t === TILE.STONE || t === TILE.ORE_COAL) {
-        oreNodes.push(new OreNode(col, sr, t));
-      }
+    // Ore nodes from surface outcrops
+    for(let col=0;col<WORLD_W;col++){
+      const sr=Math.ceil(surface[col]);
+      if(sr<0||sr>=WORLD_H) continue;
+      const t=tiles[sr*WORLD_W+col];
+      if(t===TILE.STONE||t===TILE.ORE_COAL) oreNodes.push(new OreNode(col,sr,t));
+    }
+
+    // Identify water columns and build waterEdgeCols + mudPatches
+    const waterCols=new Uint8Array(WORLD_W);
+    for(let col=0;col<WORLD_W;col++)
+      for(let row=0;row<WORLD_H;row++)
+        if(tiles[row*WORLD_W+col]===TILE.WATER){waterCols[col]=1;break;}
+
+    // waterEdgeCols: land columns within 3 tiles of water (craft sites)
+    for(let col=3;col<WORLD_W-3;col++){
+      if(waterCols[col]) continue;
+      let near=false;
+      for(let dc=-3;dc<=3;dc++) if(waterCols[col+dc]){near=true;break;}
+      if(near) waterEdgeCols.push(col);
+    }
+
+    // Mud patches: land columns immediately adjacent to water
+    for(let col=1;col<WORLD_W-1;col++){
+      if(waterCols[col]) continue;
+      if(!waterCols[col-1]&&!waterCols[col+1]) continue;
+      const sr=Math.ceil(surface[col]);
+      if(sr<0||sr>=WORLD_H) continue;
+      const t=tiles[sr*WORLD_W+col];
+      if(t===TILE.GRASS||t===TILE.DIRT) mudPatches.push(new MudPatch(col,sr));
     }
   })();
 
@@ -684,7 +780,7 @@ export function initSimulation(canvasId, sectionId) {
     const col=Math.floor(15+(i/6)*(WORLD_W-30));
     agents.push(new Agent(i,col*TILE_SIZE+TILE_SIZE/2,surfaceYPx[col]));
   }
-  for(const a of agents) a.chooseGoal(surfaceYPx, trees, oreNodes);
+  for(const a of agents) a.chooseGoal(surfaceYPx, trees, oreNodes, mudPatches, waterEdgeCols);
 
   // ── Tile helpers ──────────────────────────────────────────────
   const drawStdTile=(px,py,pw,ph,idx)=>{
@@ -699,31 +795,35 @@ export function initSimulation(canvasId, sectionId) {
     for(const[fx,fy]of dots) ctx.fillRect(px+~~(fx*pw),py+~~(fy*ph),ds,ds);
   };
 
-  // ── Tree health bars ──────────────────────────────────────────
+  // ── Resource health bars ──────────────────────────────────────
   function drawTreeHealth(tree) {
-    if (tree.state !== 'alive' || tree.wood === tree.woodMax) return;
-    const z=cam.zoom, ts=TILE_SIZE*z;
-    const sx=Math.round(tree.col*ts+ts/2-cam.x);
-    const sy=Math.round(tree.basePxY*z-cam.y);
-    const bw=Math.round(12*z), bh=Math.max(2,Math.round(2*z));
-    const bx=sx-bw/2;
+    if(tree.state!=='alive'||tree.wood===tree.woodMax) return;
+    const z=cam.zoom,ts=TILE_SIZE*z;
+    const sx=Math.round(tree.col*ts+ts/2-cam.x), sy=Math.round(tree.basePxY*z-cam.y);
+    const bw=Math.round(12*z),bh=Math.max(2,Math.round(2*z)),bx=sx-bw/2;
     const pct=tree.wood/tree.woodMax;
     ctx.fillStyle='#1a2a30'; ctx.fillRect(bx,sy,bw,bh);
     ctx.fillStyle=pct<0.33?'#e83030':pct<0.66?'#e09020':'#48c840';
     ctx.fillRect(bx,sy,Math.round(pct*bw),bh);
   }
-
-  // ── Ore node health bars ──────────────────────────────────────
   function drawOreHealth(ore) {
-    if (ore.state !== 'alive' || ore.amount === ore.amountMax) return;
-    const z=cam.zoom, ts=TILE_SIZE*z;
-    const sx=Math.round(ore.col*ts+ts/2-cam.x);
-    const sy=Math.round(ore.basePxY*z-cam.y);
-    const bw=Math.round(12*z), bh=Math.max(2,Math.round(2*z));
-    const bx=sx-bw/2;
+    if(ore.state!=='alive'||ore.amount===ore.amountMax) return;
+    const z=cam.zoom,ts=TILE_SIZE*z;
+    const sx=Math.round(ore.col*ts+ts/2-cam.x), sy=Math.round(ore.basePxY*z-cam.y);
+    const bw=Math.round(12*z),bh=Math.max(2,Math.round(2*z)),bx=sx-bw/2;
     const pct=ore.amount/ore.amountMax;
     ctx.fillStyle='#1a2a30'; ctx.fillRect(bx,sy-bh-1,bw,bh);
     ctx.fillStyle=pct<0.33?'#e83030':pct<0.66?'#e09020':'#909090';
+    ctx.fillRect(bx,sy-bh-1,Math.round(pct*bw),bh);
+  }
+  function drawMudHealth(mud) {
+    if(mud.state!=='alive'||mud.amount===mud.amountMax) return;
+    const z=cam.zoom,ts=TILE_SIZE*z;
+    const sx=Math.round(mud.col*ts+ts/2-cam.x), sy=Math.round(mud.basePxY*z-cam.y);
+    const bw=Math.round(12*z),bh=Math.max(2,Math.round(2*z)),bx=sx-bw/2;
+    const pct=mud.amount/mud.amountMax;
+    ctx.fillStyle='#1a2a30'; ctx.fillRect(bx,sy-bh-1,bw,bh);
+    ctx.fillStyle=pct<0.33?'#e83030':pct<0.66?'#e09020':'#9a7040';
     ctx.fillRect(bx,sy-bh-1,Math.round(pct*bw),bh);
   }
 
@@ -753,8 +853,9 @@ export function initSimulation(canvasId, sectionId) {
       if(ts>=14){ctx.strokeStyle='rgba(0,0,0,0.1)';ctx.lineWidth=0.5;ctx.strokeRect(px+.5,py+.5,pw-2,ph-2);}
     }
 
-    for(const t of trees) drawTreeHealth(t);
+    for(const t of trees)    drawTreeHealth(t);
     for(const n of oreNodes) drawOreHealth(n);
+    for(const m of mudPatches) drawMudHealth(m);
     drawPaths(ctx,agents,surfaceYPx,cam);
     for(const a of agents) drawAgent(ctx,a,cam);
     drawNeedsPanel(ctx,agents,W,H);
@@ -762,7 +863,7 @@ export function initSimulation(canvasId, sectionId) {
     ctx.fillStyle='rgba(6,12,20,0.82)'; ctx.fillRect(0,0,W,34);
     ctx.fillStyle='#c98a63'; ctx.font='bold 12px monospace'; ctx.fillText('AI LIFE SIMULATION',12,14);
     ctx.fillStyle='#4a6878'; ctx.font='10px monospace';
-    ctx.fillText(`obj 8 — mining & crafting  ·  drag/arrows  ·  scroll zoom  ·  ${cam.zoom.toFixed(1)}×`,12,28);
+    ctx.fillText(`obj 9 — clay production  ·  drag/arrows  ·  scroll zoom  ·  ${cam.zoom.toFixed(1)}×`,12,28);
   }
 
   // ── Input ──────────────────────────────────────────────────────
@@ -805,9 +906,10 @@ export function initSimulation(canvasId, sectionId) {
   function loop(now){
     const dt=Math.min(0.05,(now-last)/1000); last=now;
     handleKeys(dt);
-    for(const t of trees)    t.update(dt);
-    for(const n of oreNodes) n.update(dt);
-    for(const a of agents)   a.update(dt,surfaceYPx,trees,oreNodes);
+    for(const t of trees)      t.update(dt);
+    for(const n of oreNodes)   n.update(dt);
+    for(const m of mudPatches) m.update(dt);
+    for(const a of agents)     a.update(dt,surfaceYPx,trees,oreNodes,mudPatches,waterEdgeCols);
     render(dt);
     requestAnimationFrame(loop);
   }
