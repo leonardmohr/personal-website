@@ -142,6 +142,7 @@ class Agent {
                            && this.inventory.iron    <  MATERIAL.IRON.carryLimit;
     const canDeposit   = buildSite && MATERIALS_BY_SCORE.some(m=>{
       const k=m===MATERIAL.IRON?'iron':m===MATERIAL.STONE?'stone':m===MATERIAL.CLAY?'clay':'wood';
+      if(k==='wood'&&!this.hasPickaxe) return false;  // save wood for pickaxe first
       return this.inventory[k]>0;
     });
 
@@ -882,17 +883,18 @@ export function initSimulation(canvasId, sectionId) {
     };
     pv(TILE.ORE_COAL,45,1,8,5); pv(TILE.ORE_IRON,30,6,18,7);
 
-    // Rocky outcrops
+    // Rocky outcrops (stone, coal, or iron ore)
     const numOutcrops=25+~~(rand()*6);
     for(let i=0;i<numOutcrops;i++){
-      const startCol=3+~~(rand()*(WORLD_W-6)), width=1+~~(rand()*4), isCoal=rand()<0.35;
+      const startCol=3+~~(rand()*(WORLD_W-6)), width=1+~~(rand()*4);
+      const rv=rand(), oreType=rv<0.35?TILE.ORE_COAL:rv<0.55?TILE.ORE_IRON:TILE.STONE;
       for(let dc=0;dc<width;dc++){
         const col=startCol+dc;
         if(col<0||col>=WORLD_W) continue;
         const sr=Math.ceil(surface[col]);
         if(sr<0||sr>=WORLD_H) continue;
         const cur=tiles[sr*WORLD_W+col];
-        if(cur===TILE.GRASS||cur===TILE.DIRT) tiles[sr*WORLD_W+col]=isCoal?TILE.ORE_COAL:TILE.STONE;
+        if(cur===TILE.GRASS||cur===TILE.DIRT) tiles[sr*WORLD_W+col]=oreType;
       }
     }
 
@@ -900,7 +902,7 @@ export function initSimulation(canvasId, sectionId) {
       let found=false;
       for(let row=0;row<WORLD_H;row++){
         const t=tiles[row*WORLD_W+col];
-        if(t===TILE.GRASS||t===TILE.DIRT||t===TILE.STONE||t===TILE.DEEP_STONE||t===TILE.ORE_COAL){
+        if(t===TILE.GRASS||t===TILE.DIRT||t===TILE.STONE||t===TILE.DEEP_STONE||t===TILE.ORE_COAL||t===TILE.ORE_IRON){
           surfaceYPx[col]=row*TILE_SIZE; found=true; break;
         }
       }
@@ -912,7 +914,7 @@ export function initSimulation(canvasId, sectionId) {
       const sr=Math.ceil(surface[col]);
       if(sr<0||sr>=WORLD_H) continue;
       const t=tiles[sr*WORLD_W+col];
-      if(t===TILE.STONE||t===TILE.ORE_COAL) oreNodes.push(new OreNode(col,sr,t));
+      if(t===TILE.STONE||t===TILE.ORE_COAL||t===TILE.ORE_IRON) oreNodes.push(new OreNode(col,sr,t));
     }
 
     // Identify water columns and build waterEdgeCols + mudPatches
