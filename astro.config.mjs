@@ -7,8 +7,12 @@ import rehypeKatex from 'rehype-katex';
 export default defineConfig({
   integrations: [
     starlight({
-      title: 'Learning Notes',
+      title: 'leonardmohr.com',
       customCss: ['./src/styles/starlight-custom.css'],
+      components: {
+        Head: './src/components/overrides/Head.astro',
+        Sidebar: './src/components/overrides/Sidebar.astro',
+      },
       sidebar: [
         {
           label: 'Linear Algebra',
@@ -21,6 +25,10 @@ export default defineConfig({
         {
           label: 'Machine Learning',
           autogenerate: { directory: 'learning/machine-learning' }
+        },
+        {
+          label: 'Recipes',
+          autogenerate: { directory: 'recipes' }
         }
       ]
     })

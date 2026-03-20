@@ -1,0 +1,11 @@
+---
+import Default from '@astrojs/starlight/components/Sidebar.astro';
+
+const isRecipe = Astro.url.pathname.startsWith('/recipes');
+
+Astro.locals.starlightRoute.sidebar = Astro.locals.starlightRoute.sidebar.filter(
+  (entry: { label: string }) =>
+    isRecipe ? entry.label === 'Recipes' : entry.label !== 'Recipes'
+);
+---
+<Default {...Astro.props}><slot /></Default>

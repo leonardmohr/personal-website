@@ -1,0 +1,95 @@
+---
+import Default from '@astrojs/starlight/components/Head.astro';
+
+const isRecipe = Astro.url.pathname.startsWith('/recipes');
+---
+<Default {...Astro.props}><slot /></Default>
+{isRecipe && (
+  <style is:inline>
+    /*
+     * Recipe section: warm, light, natural food theme.
+     * Overrides both Starlight's core props and the site's custom dark theme.
+     */
+
+    :root {
+      color-scheme: light;
+
+      /* ── Starlight core gray scale (light: 1=darkest → 6=lightest) ── */
+      --sl-color-white:  #2c1f0e;   /* darkest text */
+      --sl-color-gray-1: #3d2d18;
+      --sl-color-gray-2: #5a4230;
+      --sl-color-gray-3: #8a6e56;
+      --sl-color-gray-4: #b09880;
+      --sl-color-gray-5: #d6c9b8;
+      --sl-color-gray-6: #ede6d8;
+      --sl-color-gray-7: #f5f0e6;
+      --sl-color-black:  #faf6ee;   /* lightest background */
+
+      /* ── Starlight semantic color mappings ── */
+      --sl-color-text:         var(--sl-color-gray-2);
+      --sl-color-text-accent:  var(--sl-color-accent);
+      --sl-color-bg:           var(--sl-color-black);
+      --sl-color-bg-nav:       var(--sl-color-gray-7);
+      --sl-color-bg-sidebar:   var(--sl-color-gray-7);
+      --sl-color-bg-inline-code: var(--sl-color-gray-6);
+      --sl-color-bg-accent:    var(--sl-color-accent);
+      --sl-color-hairline-light: var(--sl-color-gray-6);
+      --sl-color-hairline:     var(--sl-color-gray-6);
+      --sl-color-hairline-shade: var(--sl-color-gray-6);
+      --sl-color-backdrop-overlay: hsla(30, 20%, 30%, 0.5);
+
+      /* ── Accent: fresh herb / olive green ── */
+      --sl-color-accent-low:  #eef4e2;
+      --sl-color-accent:      #6b8c42;
+      --sl-color-accent-high: #3d5420;
+
+      /* ── Shadows (light mode) ── */
+      --sl-shadow-sm: 0px 1px 1px hsla(0,0%,0%,0.06), 0px 2px 1px hsla(0,0%,0%,0.06);
+      --sl-shadow-md: 0px 8px 4px hsla(0,0%,0%,0.03), 0px 5px 2px hsla(0,0%,0%,0.03),
+                      0px 3px 2px hsla(0,0%,0%,0.06), 0px 1px 1px hsla(0,0%,0%,0.06);
+
+      /* ── Custom variables from starlight-custom.css ── */
+      --bg-base:    #faf6ee;
+      --bg-surface: #f2ead8;
+      --bg-sidebar: #f5f0e6;
+
+      --border-subtle: rgba(0,0,0,0.09);
+      --border-focus:  #6b8c42;
+
+      --text-primary:   #2c1f0e;
+      --text-secondary: #5a4230;
+      --text-muted:     #8a6e56;
+
+      --link-color:       #6b8c42;
+      --link-hover:       #3d5420;
+      --accent-hover-bg:  rgba(107, 140, 66, 0.08);
+      --accent-active-bg: rgba(107, 140, 66, 0.16);
+
+      --code-bg:           #ede6d8;
+      --code-inline-color: #3d5420;
+      --code-inline-bg:    rgba(0,0,0,0.06);
+
+      --table-header-bg: rgba(0,0,0,0.03);
+
+      --selection-bg:    rgba(107, 140, 66, 0.2);
+      --selection-color: #2c1f0e;
+
+      --scrollbar-track:       #faf6ee;
+      --scrollbar-thumb:       #d6c9b8;
+      --scrollbar-thumb-hover: #b0988080;
+    }
+
+    /* Header: warm cream with a soft herb-green glow */
+    header, .header, .sl-header {
+      background:
+        radial-gradient(circle at 30% 0%, rgba(107, 140, 66, 0.06), transparent 40%),
+        var(--bg-base) !important;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    html, body, main {
+      background: var(--bg-base);
+      color: var(--text-primary);
+    }
+  </style>
+)}

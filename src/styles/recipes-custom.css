@@ -1,0 +1,78 @@
+/* src/styles/recipes-custom.css */
+/* Fresh herb-green theme — overrides the default warm-neutral theme for /recipes/ pages */
+/* Injected conditionally via src/components/overrides/Head.astro */
+
+/* ============================================================
+   DARK (default)
+   ============================================================ */
+:root {
+  /* Starlight accent — sage/herb green */
+  --sl-color-accent-low:  #182218;
+  --sl-color-accent:      #5c9452;
+  --sl-color-accent-high: #96cc8c;
+
+  /* Surfaces */
+  --bg-base:    #090b09;
+  --bg-surface: #0e110e;
+  --bg-sidebar: #0a0c0a;
+
+  /* Borders */
+  --border-focus: #5c9452;
+
+  /* Interactive */
+  --link-color:       #96cc8c;
+  --link-hover:       #b8e0b0;
+  --accent-hover-bg:  rgba(92, 148, 82, 0.08);
+  --accent-active-bg: rgba(92, 148, 82, 0.16);
+
+  /* Code */
+  --code-bg:           #0d110d;
+  --code-inline-color: #b8e0b0;
+  --code-inline-bg:    rgba(255, 255, 255, 0.06);
+
+  /* Selection */
+  --selection-bg: rgba(92, 148, 82, 0.35);
+
+  /* Scrollbar */
+  --scrollbar-thumb:       #2a3a2a;
+  --scrollbar-thumb-hover: #3d5a3d;
+}
+
+/* ============================================================
+   LIGHT
+   ============================================================ */
+:root[data-theme="light"] {
+  /* Starlight accent */
+  --sl-color-accent-low:  #e8f5e8;
+  --sl-color-accent:      #4a7a42;
+  --sl-color-accent-high: #2d5227;
+
+  /* Surfaces */
+  --bg-base:    #f7faf7;
+  --bg-surface: #eef4ee;
+  --bg-sidebar: #f2f7f2;
+
+  /* Borders */
+  --border-focus: #4a7a42;
+
+  /* Interactive */
+  --link-color:       #4a7a42;
+  --link-hover:       #2d5227;
+  --accent-hover-bg:  rgba(74, 122, 66, 0.08);
+  --accent-active-bg: rgba(74, 122, 66, 0.14);
+
+  /* Code */
+  --code-inline-color: #2d5227;
+
+  /* Selection */
+  --selection-bg: rgba(74, 122, 66, 0.2);
+}
+
+/* Header gradient — green tint instead of orange */
+header,
+.header,
+.sl-header {
+  background:
+    radial-gradient(circle at 30% 0%, rgba(92, 148, 82, 0.07), transparent 35%),
+    var(--bg-base) !important;
+}
