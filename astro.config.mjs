@@ -27,6 +27,10 @@ export default defineConfig({
           autogenerate: { directory: 'learning/machine-learning' }
         },
         {
+          label: 'Other',
+          autogenerate: { directory: 'learning/other' }
+        },
+        {
           label: 'Recipes',
           autogenerate: { directory: 'recipes' }
         }

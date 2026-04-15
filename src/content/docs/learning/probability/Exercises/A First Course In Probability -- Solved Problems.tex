@@ -1,0 +1,693 @@
+%  
+% Latex Problem Set Template by Sachin Padmanabhan
+% I created this when I was a freshman in CS 103,
+% and I continue to use it to this day.
+% 
+% Hope you enjoy!
+% 
+% There may be problems with this template.
+% If so, feel free to contact me.
+% 
+
+% Updated for Summer 2019 by Amy Liu
+
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{mathdots}
+\usepackage[pdftex]{graphicx}
+\usepackage{fancyhdr}
+\usepackage[margin=1in]{geometry}
+\usepackage{multicol}
+\usepackage{bm}
+\usepackage{listings}
+\PassOptionsToPackage{usenames,dvipsnames}{color}  %% Allow color names
+\usepackage[table, xcdraw, usenames,dvipsnames]{xcolor}
+\usepackage[table]{xcolor}
+\usepackage{pdfpages}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usepackage{enumitem}
+\usepackage[T1]{fontenc}
+\usepackage{inconsolata}
+\usepackage{framed}
+\usepackage{wasysym}
+\usepackage[thinlines]{easytable}
+\usepackage{hyperref}
+\usepackage{minted}
+\usepackage{pgfplots}
+\usepackage{gensymb}
+\usepackage{mathtools}
+\usemintedstyle{perldoc}
+\usepackage{tkz-euclide}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{caption}
+\usepackage[most]{tcolorbox}
+\usepackage{lipsum}
+\usepackage{systeme}
+
+\usetikzlibrary{calc, math, shapes.geometric, shapes.misc, arrows.meta, positioning}
+
+% \usepgfplotslibrary{external}
+% \tikzexternalize
+\usemintedstyle{perldoc}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  filecolor=magenta,
+  urlcolor=blue,
+}
+
+
+
+
+\title{A First Course in Probability\\Problems}
+\author{Leonard Mohr}
+\date{August 30, 2024}
+
+\lhead{}
+\chead{A First Course In Probability}
+\rhead{}
+\lfoot{}
+\cfoot{My Solutions}
+\rfoot{\thepage}
+
+\newcommand{\abs}[1]{\lvert #1 \rvert}
+\newcommand{\absfit}[1]{\left\lvert #1 \right\rvert}
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+\newcommand{\eval}[3]{\left[#1\right]_{#2}^{#3}}
+\renewcommand{(}{\left(}
+  \renewcommand{)}{\right)}
+\newcommand{\floor}[1]{\left\lfloor#1\right\rfloor}
+\newcommand{\ceil}[1]{\left\lceil#1\right\rceil}
+\newcommand{\pd}[1]{\frac{\partial}{\partial #1}}
+\newcommand{\inner}[1]{\langle#1\rangle}
+\newcommand{\cond}{\bigg|}
+\newcommand{\rank}[1]{\mathbf{rank}(#1)}
+\newcommand{\range}[1]{\mathbf{range}(#1)}
+\newcommand{\nullsp}[1]{\mathbf{null}(#1)}
+\newcommand{\repr}[1]{\left\langle#1\right\rangle}
+
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\tr}{tr}
+\DeclareMathOperator{\Tr}{\mathbf{Tr}}
+\DeclareMathOperator{\diag}{\mathbf{diag}}
+\DeclareMathOperator{\dist}{\mathbf{dist}}
+\DeclareMathOperator{\prob}{\mathbf{prob}}
+\DeclareMathOperator{\dom}{\mathbf{dom}}
+\DeclareMathOperator{\E}{\mathbf{E}}
+\DeclareMathOperator{\R}{\mathbb{R}}
+\DeclareMathOperator{\var}{\mathbf{var}}
+\DeclareMathOperator{\quartile}{\mathbf{quartile}}
+\DeclareMathOperator{\conv}{\mathbf{conv}}
+\DeclareMathOperator{\VC}{VC}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\Ber}{Bernoulli}
+\DeclareMathOperator{\NP}{\mathbf{NP}}
+\DeclareMathOperator{\coNP}{\mathbf{coNP}}
+\DeclareMathOperator{\TIME}{\mathsf{TIME}}
+\DeclareMathOperator{\polytime}{\mathbf{P}}
+\DeclareMathOperator{\PH}{\mathbf{PH}}
+\DeclareMathOperator{\SIZE}{\mathbf{SIZE}}
+\DeclareMathOperator{\ATIME}{\mathbf{ATIME}}
+\DeclareMathOperator{\SPACE}{\mathbf{SPACE}}
+\DeclareMathOperator{\ASPACE}{\mathbf{ASPACE}}
+\DeclareMathOperator{\NSPACE}{\mathbf{NSPACE}}
+\DeclareMathOperator{\Z}{\mathbb{Z}}
+\DeclareMathOperator{\N}{\mathbb{N}}
+\DeclareMathOperator{\EXP}{\mathbf{EXP}}
+\DeclareMathOperator{\NEXP}{\mathbf{NEXP}}
+\DeclareMathOperator{\NTIME}{\mathbf{NTIME}}
+\DeclareMathOperator{\DTIME}{\mathbf{DTIME}}
+\DeclareMathOperator{\poly}{poly}
+\DeclareMathOperator{\BPP}{\mathbf{BPP}}
+\DeclareMathOperator{\ZPP}{\mathbf{ZPP}}
+\DeclareMathOperator{\RP}{\mathbf{RP}}
+\DeclareMathOperator{\coRP}{\mathbf{coRP}}
+\DeclareMathOperator{\BPL}{\mathbf{BPL}}
+\DeclareMathOperator{\IP}{\mathbf{IP}}
+\DeclareMathOperator{\PSPACE}{\mathbf{PSPACE}}
+\DeclareMathOperator{\NPSPACE}{\mathbf{NPSPACE}}
+\DeclareMathOperator{\SAT}{\mathsf{SAT}}
+\DeclareMathOperator{\NL}{\mathbf{NL}}
+\DeclareMathOperator{\PCP}{\mathbf{PCP}}
+\DeclareMathOperator{\PP}{\mathbf{PP}}
+\DeclareMathOperator{\cost}{cost}
+\let\Pr\relax
+\DeclareMathOperator*{\Pr}{\mathbf{Pr}}
+
+\makeatletter
+\renewcommand*\env@matrix[1][*\c@MaxMatrixCols c]{%
+  \hskip -\arraycolsep
+  \let\@ifnextchar\new@ifnextchar
+  \array{#1}}
+\makeatother
+
+% start MZ
+\let\oldemptyset\emptyset
+\renewcommand{\emptyset}{\text{\O}}
+\renewcommand{\labelitemii}{$\bullet$}
+\renewcommand\qedsymbol{$\blacksquare$}
+\newenvironment{prf}{{\bfseries Proof.}}{\qedsymbol}
+\renewcommand{\emph}[1]{\textit{\textbf{#1}}}
+\newcommand{\annotate}[1]{\textit{\textcolor{blue}{#1}}}
+\usepackage{mdframed}
+\usepackage{float}
+
+% For Polyominoes
+% Source: https://tex.stackexchange.com/a/110669
+\usepackage{color}
+
+\definecolor{lightgray}{rgb}{0.75, 0.75, 0.75}
+
+\newdimen\omsq	\omsq=16pt
+\newdimen\omrule    \omrule=1pt
+\newdimen\omint
+
+\newif\ifvth	\newif\ifhth	\newif\ifomblank
+\def\OMINO#1{%
+  \vthtrue \hthtrue
+  \vbox{ \offinterlineskip\parindent=0pt \OM#1\relax\vskip1pt}}
+\definecolor{gray}{rgb}{0.5, 0.5, 0.5}
+
+\def\OM#1{%
+  \omint=\omsq	  \advance\omint-\omrule
+  \ifx\relax#1%
+  \else
+  \ifx\#1 \newline\null \hthtrue \ifvth\vthfalse\else\vskip-\omrule\vthtrue\fi
+  \else%
+  \ifx .#1\hskip\ifhth \omrule\else \omint\fi
+  \else%
+  \ifx +#1\def\colour{black}\fi%
+  \ifx -#1\def\colour{black}\fi%
+  \ifx |#1\def\colour{black}\fi%
+  \ifx @#1\def\colour{black}\fi%
+  \ifx r#1\def\colour{red}\fi%
+  \ifx g#1\def\colour{green}\fi%
+  \ifx b#1\def\colour{blue}\fi%
+  \ifx y#1\def\colour{yellow}\fi%
+  \ifx m#1\def\colour{magenta}\fi%
+  \ifx c#1\def\colour{cyan}\fi%
+  \ifx x#1\def\colour{lightgray}\fi%
+  \textcolor{\colour}{\rule{\ifhth\omrule\else\omsq\fi}{\ifvth\omrule\else\omsq\fi}}%
+  \ifhth\else\hskip -\omrule\fi%
+  \fi%
+  \ifhth\hthfalse\else\hthtrue\fi%
+  \fi%
+  \expandafter\OM%
+  \fi}
+
+\makeatother
+% end MZ
+
+\definecolor{shadecolor}{gray}{0.95}
+
+\theoremstyle{plain}
+\newtheorem*{lem}{Lemma}
+
+\theoremstyle{plain}
+\newtheorem*{claim}{Claim}
+
+\theoremstyle{definition}
+\newtheorem*{answer}{Answer}
+\newtheoremstyle{indented}
+  {1em} % Space above
+  {1.5em} % Space below
+  {\addtolength{\leftskip}{2.5em}} % Body font
+  {} % Indent amount
+  {\bfseries} % Theorem head font
+  {.} % Punctuation after theorem head
+  {.5em} % Space after theorem head
+  {} % Theorem head spec (can be left empty, meaning `normal')
+%\newtheoremstyle{indented}{\topsep}{\topsep}{\addtolength{\leftskip}{2.5em}}{}{\bfseries}{.}{.5em}{}
+\theoremstyle{indented}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{defenition}{Defenition}
+\newtheorem*{thm}{Theorem}
+\newtheorem{corollary}{Corollary}[theorem]
+\newtheorem{lemma}[theorem]{Lemma}
+
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\setlength{\parindent}{0pt}
+
+\pagestyle{fancy}
+
+\renewcommand{\thefootnote}{\fnsymbol{footnote}}
+
+\makeatletter\@addtoreset{section}{part}\makeatother%
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\section{Chapter 1}
+\subsection{Problems}\label{subsec:}
+\begin{enumerate}
+\item
+  \begin{enumerate}[label=\alph*)]
+\item How many different 7-place license plates are possible if the first 2 places are for letters and the other 5 for numbers?
+
+  \begin{tcolorbox}[%
+    enhanced, 
+    breakable,
+    frame hidden,
+    overlay broken = {
+      (frame.north west) rectangle (frame.south east);},
+    ]
+    There are $26$ different letters, and $10$ different numbers.  Since there are five numbers chosen and 2 letters chosen then there are a total of
+    \[26^2 \cdot 10^5 = 67,600,000\]
+    different possibilities.
+  \end{tcolorbox}
+
+  \item Repeat part (a) under the assumption that no letter or number can be repeated in a single license plate. 
+
+    \begin{tcolorbox}[%
+      enhanced, 
+      breakable,
+      frame hidden,
+      overlay broken = {
+        (frame.north west) rectangle (frame.south east);},
+      ]
+      The number of possibilities are
+      \begin{align*}
+26 \cdot 25 \cdot \frac{10!}{5!} &= 19,656,000.
+      \end{align*}
+    \end{tcolorbox}
+  \end{enumerate}
+
+  \item How many outcome sequences are possible when a die is rolled four times, where we say, for instance, that the outcome is $3,4,3,1$ if the first roll landed on $3$, the second on $4$, the third on $3$, and the fourth on $1$?
+
+    \begin{tcolorbox}[%
+      enhanced, 
+      breakable,
+      frame hidden,
+      overlay broken = {
+        (frame.north west) rectangle (frame.south east);},
+      ]
+      For a $6$ sided die, there are $6^4$ different possibilities.
+    \end{tcolorbox}
+
+    \item Twenty workers are to be assigned to twenty different jobs, one to each job. How many different assignments are possible?
+
+      \begin{tcolorbox}[%
+        enhanced, 
+        breakable,
+        frame hidden,
+        overlay broken = {
+          (frame.north west) rectangle (frame.south east);},
+        ]
+        There are $20!$ different possible assignments.
+      \end{tcolorbox}
+
+\item John, Jim, Jay, and Jack have formed a band consisting of 4 instruments.  If each of the boys can play all 4 instruments, how many different arrangements are possible? What if John and Jim can play all 4 instruments, but Jay and Jack can each play only piano and drums?
+
+  \begin{tcolorbox}[%
+    enhanced, 
+    breakable,
+    frame hidden,
+    overlay broken = {
+      (frame.north west) rectangle (frame.south east);},
+    ]
+    If each member can play all 4 instruments, then there are $4!$ different possible arrangements.  Since Jay and Jack can only plan 2 instruments, then there are $2 \cdot 2 = 4$ different possible arrangements.  
+  \end{tcolorbox}
+
+  \item For years, telepthone area codes in the United States and Canada consisted of a sequence of three digits. The first digin was an integer between $2$ and $9$, the second digit was either $0$ or $1$, and the third digit was an integer from $1$ to $9$.  How many area codes were possible? How many area codes starting with a 4 were possible?
+
+    \begin{tcolorbox}[%
+      enhanced, 
+      breakable,
+      frame hidden,
+      overlay broken = {
+        (frame.north west) rectangle (frame.south east);},
+      ]
+      There were a total of
+      \[ 8 \cdot 2 \cdot 9 = 144\]
+      different possible area codes.
+      If the first digit was a 4, then there were
+      \[1 \cdot 2 \cdot 9 = 18\]
+      different possible area codes.
+    \end{tcolorbox}
+
+  \item A well-known nursery rhyme starts as follows:
+    ``As I was going to St.Ives\\
+    I met a man with $7$ wives.\\
+    Each wife had $7$ sacks.\\
+    Each sack had $7$ cats.\\
+    Each cat had $7$ kittens...''
+    How many kittens did the traveler meet?
+
+   \begin{tcolorbox}[%
+     enhanced, 
+     breakable,
+     frame hidden,
+     overlay broken = {
+       (frame.north west) rectangle (frame.south east);},
+     ]
+     Who knows, the traveler just met the man who had a lot of wifes, not necesarilly the wives and their exorbitant number of sacks containing cats.  But he met,
+     \[7^4 = 2401\]
+     kittens.
+   \end{tcolorbox}
+
+   \item \begin{enumerate}[label=\alph*)]
+\item In how many ways can 3 boys and 3 girls sit in a row?
+
+  \begin{tcolorbox}[%
+    enhanced, 
+    breakable,
+    frame hidden,
+    overlay broken = {
+      (frame.north west) rectangle (frame.south east);},
+    ]
+    Let's assume that each boy and girl is not unique, all we care about is gender.  First, there are $6!$ possible different arrangements of the boys and girls, but since they are unique, we need to get rid of the $3!$ different combinations of the girls, and the $3!$ different combinations of the boys.  Thus there are
+    \[\frac{6!}{3!\cdot 3!}\]
+    different possible arrangements.\\\\
+    If they are unique, then there are $6! = 720$ different possible arrangements.
+  \end{tcolorbox}
+
+\item In how many ways can $3$ boys and $3$ girls sit in a row if the boys and the girls are to sit together?
+
+  \begin{tcolorbox}[%
+    enhanced, 
+    breakable,
+    frame hidden,
+    overlay broken = {
+      (frame.north west) rectangle (frame.south east);},
+    ]
+    There are $3!$ ways to arrange boys, and $3!$ ways to arrange the girls.  We also need to select who sits where, thus there are a total of $3! \cdot 3! \cdot 2$ different arrangements.
+  \end{tcolorbox}
+
+\item In how many ways if only the boys must sit together?
+
+    \begin{tcolorbox}[%
+      enhanced, 
+      breakable,
+      frame hidden,
+      overlay broken = {
+        (frame.north west) rectangle (frame.south east);},
+      ]
+      There are $3!$ ways to arrange boys, and girls, and there are $4$ different places we can place the boys.  Thus there are $3!\cdot 3! \cdot 4$ different possible arrangements.
+    \end{tcolorbox}
+
+    \item In how many ways if no two people of the same sex are allowed to sit next to eachother?
+
+      \begin{tcolorbox}[%
+        enhanced, 
+        breakable,
+        frame hidden,
+        overlay broken = {
+          (frame.north west) rectangle (frame.south east);},
+        ]
+        This is just alternating boys and girls.  We first choose if a boy or a girl should sit first, then we choose the boys and girls.  Thus we have
+        \[2 \cdot 3! \cdot 3! = 72\]
+        different options.
+      \end{tcolorbox}
+    \end{enumerate}
+
+  \item How many different letter arrangements can be made from the letters
+    \begin{enumerate}[label=\alph*)]
+\item Fluke?
+
+  \begin{tcolorbox}[%
+    enhanced, 
+    breakable,
+    frame hidden,
+    overlay broken = {
+      (frame.north west) rectangle (frame.south east);},
+    ]
+    There are $5$ distinct letters, thus $5!$.
+  \end{tcolorbox}
+
+  \item Propose?
+
+    \begin{tcolorbox}[%
+      enhanced, 
+      breakable,
+      frame hidden,
+      overlay broken = {
+        (frame.north west) rectangle (frame.south east);},
+      ]
+      There are $7$ letters, so there are $7!$ different arrangements of letters, but p, and o are repeated twice each and so we have
+      \begin{align*}
+\frac{7!}{2!\cdot 2!}
+      \end{align*}
+      different possibilities.
+    \end{tcolorbox}
+
+    \item Mississippi?
+
+      \begin{tcolorbox}[%
+        enhanced, 
+        breakable,
+        frame hidden,
+        overlay broken = {
+          (frame.north west) rectangle (frame.south east);},
+        ]
+        There are $11$ characters, but both \texttt{s} and \texttt{i} are repeated $4$ times, and \texttt{p} is repeated two times, therefore
+        \[\frac{11!}{4!\cdot 4!\cdot 2!}\]
+      \end{tcolorbox}
+
+      \item Arrange?
+
+        \begin{tcolorbox}[%
+          enhanced, 
+          breakable,
+          frame hidden,
+          overlay broken = {
+            (frame.north west) rectangle (frame.south east);},
+          ]
+          There are $7$ letters, but both \texttt{r} and \texttt{a} are repeated $2$ times. 
+          \[\frac{7!}{2!\cdot 2!}\]
+        \end{tcolorbox}
+      \end{enumerate}
+
+   \item A child has $12$ blocks, of which $6$ are black, $4$ are red, $1$ is white, and $1$ is blue.  If the child puts the blocks in a line, how many arrangements are possible?
+
+     \begin{tcolorbox}[%
+       enhanced, 
+       breakable,
+       frame hidden,
+       overlay broken = {
+         (frame.north west) rectangle (frame.south east);},
+       ]
+       Let's assume that blocks of the same color are indistinguishable.  To start there are $12$ different blocks, giving a total of $12!$ different arrangements.  But the the $6$ black blocks, and  $4$ red.  Thus there are a total of
+       \[\frac{12!}{4!\cdot 6!}\]
+       arrangements.
+     \end{tcolorbox}
+
+   \item In how many ways can $8$ people be seated in a row if
+     \begin{enumerate}[label=\alph*)]
+\item there are no restrictions on the seating arrangmeent?
+
+  \begin{tcolorbox}[%
+    enhanced, 
+    breakable,
+    frame hidden,
+    overlay broken = {
+      (frame.north west) rectangle (frame.south east);},
+    ]
+    $8!$ different arrangements.
+  \end{tcolorbox}
+
+  \item persons $A$ and $B$ must sit next to each other?
+
+    \begin{tcolorbox}[%
+      enhanced, 
+      breakable,
+      frame hidden,
+      overlay broken = {
+        (frame.north west) rectangle (frame.south east);},
+      ]
+      Then when ordering the people, we can treat $A$ and $B$ as a group, thus there are $7! \cdot 2!$ different arrangements ($2!$ different ways to organize $A$ and $B$ within their group).
+    \end{tcolorbox}
+
+    \item there are $4$ men and $4$ men, and no $2$ men or $2$ womaen can sit next to each other?
+
+      \begin{tcolorbox}[%
+        enhanced, 
+        breakable,
+        frame hidden,
+        overlay broken = {
+          (frame.north west) rectangle (frame.south east);},
+        ]
+        This is basically saying that there are two possible arrangements \texttt{MFMFMFMF} \texttt{FMFMFMFM}.  Within each option there are $4!$ ways to arrange the men, and $4!$ ways to arrange the women.  Thus there are a total of $2 \cdot 4! \cdot 4!$ possible different arrangements.  
+      \end{tcolorbox}
+
+      \item there are $5$ men, $3$ women and all the men must sit next to eachother?
+
+        \begin{tcolorbox}[%
+          enhanced, 
+          breakable,
+          frame hidden,
+          overlay broken = {
+            (frame.north west) rectangle (frame.south east);},
+          ]
+          There are
+          \begin{itemize}
+          \item $5!$ different ways to arrange the men
+          \item $3!$ different ways to arrange the women
+          \item After placing the $3$ women, there are $4$ different places to place the group of men.
+          \end{itemize}
+          Thus there are a total of $5! \cdot 3! \cdot 4$ different possible arrangements.
+        \end{tcolorbox}
+
+      \item There are $4$ married couples and each couple must sit together?
+
+        \begin{tcolorbox}[%
+          enhanced, 
+          breakable,
+          frame hidden,
+          overlay broken = {
+            (frame.north west) rectangle (frame.south east);},
+          ]
+          There are $4$ different groups, and each group can be arranged $2! = 2$ different ways.  Thus there are a total of
+          \[4! \cdot 2^4\]
+          different arrangements.
+        \end{tcolorbox}
+      \end{enumerate}
+
+    \item In how many ways can $3$ novels, $2$ math books, and $1$ chemistry book be arranged on a bookshelf if
+      \begin{enumerate}[label=\alph*)]
+\item the books can be arranged in any order?
+
+  \begin{tcolorbox}[%
+    enhanced, 
+    breakable,
+    frame hidden,
+    overlay broken = {
+      (frame.north west) rectangle (frame.south east);},
+    ]
+    There are $6$ books total, and since order doesn't matter, there are $6!$ ways to arrange them.
+  \end{tcolorbox}
+
+  \item the math books must be together and the novels must be together?
+
+    \begin{tcolorbox}[%
+      enhanced, 
+      breakable,
+      frame hidden,
+      overlay broken = {
+        (frame.north west) rectangle (frame.south east);},
+      ]
+      Thinking about this in components we have:
+      \begin{itemize}
+      \item $3$ groups: $3!$ ways to arrange each group
+      \item $3!$ ways to arrange the novels
+      \item $2!$ ways to arrange the math books
+      \item $1!$ ways to arrange chemistry book
+      \end{itemize}
+      Thus there is a total of
+      \[3! \cdot 3! \cdot 2!\]
+      ways to arrange the books.
+    \end{tcolorbox}
+
+    \item the novels must be together, but the other books can be arranged in any order?
+
+      \begin{tcolorbox}[%
+        enhanced, 
+        breakable,
+        frame hidden,
+        overlay broken = {
+          (frame.north west) rectangle (frame.south east);},
+        ]
+        There are 4 blocks: the novels, 2 math books (one block each), and the chemistry book.  But there are also the $3!$ ways of arranging the novels, so a total of
+        \[4! \cdot 3!\]
+        arrangements.
+      \end{tcolorbox}
+    \end{enumerate}
+
+  \item Five seperate awards (best scholarship, best leadership qualities, and so on) are to be presented to selected students from a class of 30.  How many different outcomes are possible if
+    \begin{enumerate}[label=\alph*)]
+\item a student can receive any number of awards?
+  \begin{tcolorbox}[%
+    enhanced, 
+    breakable,
+    frame hidden,
+    overlay broken = {
+      (frame.north west) rectangle (frame.south east);},
+    ]
+    At each point in choosing an award winner, there is a pool of $30$ students to choose from.
+    Thus there is a total of
+    \[30^5\]
+    different ways to award the awards.
+  \end{tcolorbox}
+
+  \item A student can only recieve one award.
+
+    \begin{tcolorbox}[%
+      enhanced, 
+      breakable,
+      frame hidden,
+      overlay broken = {
+        (frame.north west) rectangle (frame.south east);},
+      ]
+      Then, at each point of recieving an award, that student is removed from selection pool.  Thus there are a total of
+      \[\frac{30!}{25!}\]
+      different ways to hand out the awards.
+    \end{tcolorbox}
+  \end{enumerate}
+ \item Consider a group of 20 people. If everyone shakes hands with everyone else, how many handshakes take place?
+
+   \begin{tcolorbox}[%
+     enhanced, 
+     breakable,
+     frame hidden,
+     overlay broken = {
+       (frame.north west) rectangle (frame.south east);},
+     ]
+     Each person shakes $19$ hands, and there are a total of $20$ people.  But each handshake is counted twice, so a total of
+     \[\frac{20\cdot 19}{2}\]
+    total handshakes.
+  \end{tcolorbox}
+  \item How many $5$ card poker hands are there?
+
+    \begin{tcolorbox}[%
+      enhanced, 
+      breakable,
+      frame hidden,
+      overlay broken = {
+        (frame.north west) rectangle (frame.south east);},
+      ]
+      A standard deck of cards has $52$ cards.  This means that there are a total of
+      \[\frac{52!}{47!}\]
+      ways to choose $5$ different cards.  But the order of the cards in your hand does not matter,
+      so we need to get rid of duplicates.  This means that there is a total of
+      \[\frac{52!}{47!5!}\]
+      legal $5$ card poker hands.
+    \end{tcolorbox}
+
+    \item A dance class consists of 22 students, of which 10 are women and $12$ are men.  If $5$ men and $5$ women are to be chosen and then paired off, how many results are possible?
+
+      \begin{tcolorbox}[%
+        enhanced, 
+        breakable,
+        frame hidden,
+        overlay broken = {
+          (frame.north west) rectangle (frame.south east);},
+        ]
+        There are
+        \begin{itemize}
+        \item $12 \choose 5$ ways to choose the men
+        \item $10 \choose 5$ ways to choose the women
+        \item $5!$ ways different ways of pairing up the $5$ men with $5$ women.  To see this, you can
+          imagine the first man has $5$ options, the next has $4$ and so forth.
+        \end{itemize}
+        Thus there are a total of
+        \[\binom{12}{5} \cdot \binom{10}{5} \cdot 5!\]
+        different possible results.
+      \end{tcolorbox}
+\end{enumerate}
+
+
+\end{document}
+
+
+
+

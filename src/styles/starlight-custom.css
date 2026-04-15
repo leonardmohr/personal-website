@@ -356,6 +356,12 @@ aside {
   background: var(--accent-hover-bg);
 }
 
+
+/* don't display icon and title for notes */
+.starlight-aside--note .starlight-aside__title {
+  display: none !important;
+}
+
 /* Tables — use separate + border-spacing:0 so border-radius works */
 table {
   border-collapse: separate;
